@@ -1,0 +1,7 @@
+numpy
+librosa
+customtkinter
+Pillow
+
+# nur für den EXE-Build benötigt (siehe build_exe.bat)
+pyinstaller
