@@ -1,4 +1,4 @@
-# Musik Video Generator v2.3
+# Musik Video Generator v2.4
 
 from __future__ import annotations
 
@@ -860,7 +860,6 @@ def render_video(
             seg_index += 1
 
             vf_vorspann = build_vf_base(out_w, out_h, "shorts" if is_shorts else "normal")
-            vorspann_len = ffprobe_duration(vorspann_src)
 
             cmd_vorspann = [
                 ffmpeg_cmd(), "-y", "-hide_banner", "-fflags", "+genpts",
@@ -873,6 +872,10 @@ def render_video(
                 str(out_seg)
             ]
             run_hidden(cmd_vorspann)
+            # WICHTIG: Länge aus dem tatsächlich gerenderten Segment messen, nicht aus der
+            # Originalquelle — die CFR-Konvertierung kann die Länge um einzelne Frames
+            # verschieben. Sonst laufen Musik-Delay (adelay) und Video-Segmentlänge auseinander.
+            vorspann_len = ffprobe_duration(out_seg)
             segments_files.append(out_seg)
             seg_durations.append(float(vorspann_len))
             seg_labels.append(f"Vorspann: {vorspann_src.stem}")
@@ -1081,7 +1084,7 @@ def render_video(
         outro_delay_ms = 0
         if outro_src is not None and outro_src.exists() and has_audio_stream(outro_src):
             outro_audio_path = outro_src
-            outro_delay_ms = int(music_dur * 1000)
+            outro_delay_ms = round(music_dur * 1000)
 
         # Vorspann-Audio: läuft VOR der Musik. Die Musik wird um vorspann_len verzögert.
         vorspann_audio_path = None
@@ -1089,7 +1092,7 @@ def render_video(
         music_delay_ms = 0
         if vorspann_src is not None and vorspann_src.exists() and has_audio_stream(vorspann_src):
             vorspann_audio_path = vorspann_src
-            music_delay_ms = int(vorspann_len * 1000)
+            music_delay_ms = round(vorspann_len * 1000)
 
         # ----- Filter-Complex dynamisch zusammenbauen -----
         # Inputs: 0=video_only, 1=musik, [2]=outro (falls vorhanden), [2 oder 3]=vorspann
@@ -1191,7 +1194,7 @@ ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
-app.title("Musik Video Generator  v2.3")
+app.title("Musik Video Generator  v2.4")
 app.geometry("960x720")
 app.minsize(960, 720)
 
@@ -2810,7 +2813,7 @@ def _do_reorder(audio_path: str, out_path: Path):
                     orig_outro_path = Path(orig_outro)
                     if orig_outro_path.exists() and has_audio_stream(orig_outro_path):
                         outro_audio_path = orig_outro_path
-                        outro_delay_ms = int(music_dur * 1000)
+                        outro_delay_ms = round(music_dur * 1000)
 
             # Vorspann-Audio nur wenn das Vorspann-Segment das ERSTE ist (nicht verschoben)
             # UND die Original-Vorspann-Quelle noch existiert und Ton hat.
@@ -2824,7 +2827,7 @@ def _do_reorder(audio_path: str, out_path: Path):
                     orig_vorspann_path = Path(orig_vorspann)
                     if orig_vorspann_path.exists() and has_audio_stream(orig_vorspann_path):
                         vorspann_audio_path = orig_vorspann_path
-                        music_delay_ms = int(ri.get("vorspann_len", 0.0) * 1000)
+                        music_delay_ms = round(ri.get("vorspann_len", 0.0) * 1000)
 
             temp_out = temp_dir / "final.mp4"
 
