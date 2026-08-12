@@ -23,10 +23,6 @@ Fertige Windows-EXE (portable, kein Python nötig):
 - **Clip-Editor** – Reihenfolge der Clips nach dem Rendern per Drag & Drop anpassen, ohne komplett neu zu rendern
 - **YouTube-Shortcut** – Upload-Seite direkt aus dem Programm öffnen
 
-## Screenshots
-
-*(Screenshots hier einfügen, z. B. Hauptfenster und Clip-Editor)*
-
 ## Installation & Nutzung
 
 ### Für Anwender
@@ -39,6 +35,13 @@ Fertige Windows-EXE (portable, kein Python nötig):
 Ausführliche Anleitung: `MVG_Bedienungsanleitung.pdf` (liegt neben der EXE, oder direkt im Programm über den `?`-Button erreichbar)
 
 ### Für Entwickler
+
+## Zusätzlich benötigte Datein
+
+- **icon.ico
+- **splash.png
+- **Sound/done.wav
+- **ffmpeg/
 
 ```bash
 git clone https://github.com/<user>/<repo>.git
