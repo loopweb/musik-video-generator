@@ -1,4 +1,4 @@
-# Musik Video Generator v2.4
+# Musik Video Generator v2.5
 
 from __future__ import annotations
 
@@ -793,21 +793,6 @@ def render_video(
         if vorspann_candidates:
             vorspann_src = random.choice(vorspann_candidates)
 
-    start_offset = intro_len
-    cut_points2: list[float] = []
-    if start_offset < music_dur - 0.05:
-        cut_points2 = [t for t in cut_points if t >= start_offset]
-        if not cut_points2 or abs(cut_points2[0] - start_offset) > 1e-6:
-            cut_points2 = [start_offset] + cut_points2
-        if cut_points2[-1] < music_dur:
-            cut_points2.append(music_dur)
-
-    cuts_total = (1 if intro_src else 0) + max(0, len(cut_points2) - 1)
-
-    if status_cb:
-        fmt = "Shorts 9:16 · 58s" if shorts_limited else ("Shorts 9:16" if is_shorts else "Normal 16:9")
-        src_txt = f"Extern(V:{len(ext_vid)}|F:{len(ext_ph)}) Intern({len(pool_vid)}) Mode:{source_mode}"
-        status_cb(f"{fmt} | {src_txt} | Cuts: {cuts_total}")
     if progress_cb:
         progress_cb(0.05)
 
@@ -902,9 +887,32 @@ def render_video(
                 str(out_seg)
             ]
             run_hidden(cmd_intro)
+            # WICHTIG: Länge aus dem tatsächlich gerenderten Segment messen, nicht aus dem
+            # angeforderten -t Wert — die CFR-Konvertierung rundet auf ganze Frames, dadurch
+            # kann das Segment länger/kürzer als intro_len werden. Sonst wird das Gesamtvideo
+            # länger als die Musik (Cut-Punkte basieren auf dem alten, falschen intro_len).
+            intro_len = ffprobe_duration(out_seg)
             segments_files.append(out_seg)
             seg_durations.append(float(intro_len))
             seg_labels.append(f"Intro: {intro_src.stem}")
+
+        # Cut-Punkte für die Musik-Clips werden ERST JETZT berechnet — mit der tatsächlich
+        # gerenderten Intro-Länge, nicht der angeforderten. So bleibt die Gesamtlänge korrekt.
+        start_offset = intro_len
+        cut_points2: list[float] = []
+        if start_offset < music_dur - 0.05:
+            cut_points2 = [t for t in cut_points if t >= start_offset]
+            if not cut_points2 or abs(cut_points2[0] - start_offset) > 1e-6:
+                cut_points2 = [start_offset] + cut_points2
+            if cut_points2[-1] < music_dur:
+                cut_points2.append(music_dur)
+
+        cuts_total = (1 if intro_src else 0) + max(0, len(cut_points2) - 1)
+
+        if status_cb:
+            fmt = "Shorts 9:16 · 58s" if shorts_limited else ("Shorts 9:16" if is_shorts else "Normal 16:9")
+            src_txt = f"Extern(V:{len(ext_vid)}|F:{len(ext_ph)}) Intern({len(pool_vid)}) Mode:{source_mode}"
+            status_cb(f"{fmt} | {src_txt} | Cuts: {cuts_total}")
 
         if status_cb:
             status_cb("Rendere Segmente…")
@@ -1194,7 +1202,7 @@ ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
-app.title("Musik Video Generator  v2.4")
+app.title("Musik Video Generator  v2.5")
 app.geometry("960x720")
 app.minsize(960, 720)
 
