@@ -1,4 +1,4 @@
-# Musik Video Generator v2.5
+# Musik Video Generator v2.6
 
 from __future__ import annotations
 
@@ -745,10 +745,7 @@ def render_video(
     if progress_cb:
         progress_cb(0.02)
 
-    beat_times, _analysis_dur = detect_beats(audio_path)
-    # Für die Zieldauer ist die tatsächliche Containerdauer maßgeblich.
-    # librosa dient nur der Beat-Erkennung und kann je nach Codec leicht abweichen.
-    music_dur_full = ffprobe_duration(Path(audio_path))
+    beat_times, music_dur_full = detect_beats(audio_path)
     music_dur = min(music_dur_full, SHORTS_MAX_SEC) if shorts_limited else music_dur_full
 
     if speed == "gentle":
@@ -776,7 +773,7 @@ def render_video(
         intro_candidates = list_video_files(INTRO_DIR)
         if intro_candidates:
             intro_src = random.choice(intro_candidates)   # random statt immer [0]
-            intro_len = ffprobe_duration(intro_src)
+            intro_len = min(ffprobe_duration(intro_src), music_dur)
             if intro_len < 0.20:
                 intro_src = None
                 intro_len = 0.0
@@ -795,34 +792,6 @@ def render_video(
         vorspann_candidates = list_video_files(VORSPANN_DIR)
         if vorspann_candidates:
             vorspann_src = random.choice(vorspann_candidates)
-
-    # Pre-Intro und Outro liegen INNERHALB der Songdauer. Für die eigentliche
-    # Musik bleibt daher nur der Bereich dazwischen übrig.
-    vorspann_len = 0.0
-    if vorspann_src is not None:
-        vorspann_len = min(ffprobe_duration(vorspann_src), music_dur)
-
-    outro_len = 0.0
-    if outro_src is not None:
-        outro_len = min(
-            ffprobe_duration(outro_src),
-            max(0.0, music_dur - vorspann_len)
-        )
-        if outro_len < 0.20:
-            outro_src = None
-            outro_len = 0.0
-
-    # Das normale Intro bekommt den verbleibenden Platz zwischen Pre-Intro und
-    # Outro. Damit kann auch ein ungewöhnlich langes Intro die Zieldauer nicht
-    # überschreiten.
-    if intro_src is not None:
-        intro_len = min(
-            intro_len,
-            max(0.0, music_dur - vorspann_len - outro_len)
-        )
-        if intro_len < 0.20:
-            intro_src = None
-            intro_len = 0.0
 
     if progress_cb:
         progress_cb(0.05)
@@ -867,6 +836,7 @@ def render_video(
 
         # Vorspann — läuft ganz am Anfang, VOR dem Intro. Segment wird stumm gerendert
         # (analog zum Outro), der eigene Ton wird separat beim finalen Mux vor die Musik gelegt.
+        vorspann_len = 0.0
         if vorspann_src is not None and vorspann_src.exists():
             if status_cb:
                 status_cb("Rendere Pre-Intro…")
@@ -879,7 +849,6 @@ def render_video(
             cmd_vorspann = [
                 ffmpeg_cmd(), "-y", "-hide_banner", "-fflags", "+genpts",
                 "-i", str(src_vorspann),
-                "-t", f"{vorspann_len:.4f}",
                 "-vf", vf_vorspann,
                 "-an",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -927,17 +896,20 @@ def render_video(
             seg_durations.append(float(intro_len))
             seg_labels.append(f"Intro: {intro_src.stem}")
 
-        # Die Musik startet nach dem Pre-Intro beim normalen Intro und endet vor
-        # dem Outro. Pre-Intro und Outro verlängern das Video also nicht.
+        # Cut-Punkte für die Musik-Clips werden ERST JETZT berechnet — mit der tatsächlich
+        # gerenderten Intro-Länge, nicht der angeforderten. So bleibt die Gesamtlänge korrekt.
         start_offset = intro_len
-        music_play_dur = max(0.0, music_dur - vorspann_len - outro_len)
         cut_points2: list[float] = []
-        if start_offset < music_play_dur - 0.05:
-            cut_points2 = [t for t in cut_points if start_offset <= t <= music_play_dur]
-            if not cut_points2 or abs(cut_points2[0] - start_offset) > 1e-6:
-                cut_points2 = [start_offset] + cut_points2
-            if cut_points2[-1] < music_play_dur:
-                cut_points2.append(music_play_dur)
+        if start_offset < music_dur - 0.05:
+            # Das erste Clip-Segment nach dem Intro darf nicht auffällig kurz sein. Ohne diese
+            # Prüfung fällt der nächste Beat-Cut-Punkt oft zufällig knapp hinter start_offset
+            # (z.B. nur 0.3–1.3s entfernt), was wie ein Fehler wirkt. Deshalb: alle Cut-Punkte
+            # verwerfen, die näher als eine normale Segmentlänge an start_offset liegen.
+            min_first_seg = max(0.20, float(target_seconds) * 0.75)
+            cut_points2 = [t for t in cut_points if t >= start_offset + min_first_seg]
+            cut_points2 = [start_offset] + cut_points2
+            if cut_points2[-1] < music_dur:
+                cut_points2.append(music_dur)
 
         cuts_total = (1 if intro_src else 0) + max(0, len(cut_points2) - 1)
 
@@ -958,8 +930,8 @@ def render_video(
             if seg_len <= 0.05:
                 continue
 
-            # Kein Überhang: Die Timeline muss exakt Platz für das Outro lassen.
-            seg_len_out = seg_len
+            is_last = (i == total_cuts - 1)
+            seg_len_out = seg_len + (VIDEO_OVERHANG_SEC if is_last and (not is_shorts) else 0.0)
 
             out_seg = seg_dir / f"seg{seg_index:04d}.mp4"
             seg_index += 1
@@ -1070,7 +1042,6 @@ def render_video(
             cmd_outro_prep = [
                 ffmpeg_cmd(), "-y", "-hide_banner", "-fflags", "+genpts",
                 "-i", str(outro_src),
-                "-t", f"{outro_len:.4f}",
                 "-vf", vf_outro,
                 "-an",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -1110,28 +1081,30 @@ def render_video(
             progress_cb(0.92)
 
         if shorts_limited:
-            fade_start, fade_d = compute_fade(music_play_dur)
+            fade_start, fade_d = compute_fade(music_dur)
             a_chain = (
-                f"atrim=0:{music_play_dur:.4f},"
+                f"atrim=0:{music_dur:.4f},"
                 f"afade=t=out:st={fade_start:.4f}:d={fade_d:.4f},"
                 "asetpts=PTS-STARTPTS"
             )
         else:
-            a_chain = f"atrim=0:{music_play_dur:.4f},asetpts=PTS-STARTPTS"
+            a_chain = f"atrim=0:{music_dur:.4f},asetpts=PTS-STARTPTS"
+
+        # Vorspann-Audio: läuft VOR der Musik. Die Musik wird um vorspann_len verzögert.
+        vorspann_audio_path = None
+        music_delay_ms = 0
+        if vorspann_src is not None and vorspann_src.exists() and has_audio_stream(vorspann_src):
+            vorspann_audio_path = vorspann_src
+            music_delay_ms = round(vorspann_len * 1000)
 
         # Outro-Audio: nur wenn Outro am Ende liegt und eigenen Ton hat.
-        # Es startet so, dass es exakt am Ende der festen Gesamtdauer liegt.
+        # Es wird um (Pre-Intro-Länge + Musiklänge) verzögert, damit es NACH der Musik startet —
+        # nicht nur um music_dur, sonst stimmt der Zeitpunkt nicht wenn ein Pre-Intro aktiv ist.
         outro_audio_path = None
         outro_delay_ms = 0
         if outro_src is not None and outro_src.exists() and has_audio_stream(outro_src):
             outro_audio_path = outro_src
-            outro_delay_ms = round((music_dur - outro_len) * 1000)
-
-        # Vorspann-Audio läuft am Anfang; danach startet die Musik beim Intro.
-        vorspann_audio_path = None
-        music_delay_ms = round(vorspann_len * 1000)
-        if vorspann_src is not None and vorspann_src.exists() and has_audio_stream(vorspann_src):
-            vorspann_audio_path = vorspann_src
+            outro_delay_ms = music_delay_ms + round(music_dur * 1000)
 
         # ----- Filter-Complex dynamisch zusammenbauen -----
         # Inputs: 0=video_only, 1=musik, [2]=outro (falls vorhanden), [2 oder 3]=vorspann
@@ -1157,15 +1130,15 @@ def render_video(
         audio_parts = [mus_chain]
         mix_labels = ["mus"]
         if outro_idx is not None:
-            audio_parts.append(f"[{outro_idx}:a]atrim=0:{outro_len:.4f},asetpts=PTS-STARTPTS,adelay={outro_delay_ms}|{outro_delay_ms}[outro]")
+            audio_parts.append(f"[{outro_idx}:a]adelay={outro_delay_ms}|{outro_delay_ms}[outro]")
             mix_labels.append("outro")
         if vorspann_idx is not None:
-            audio_parts.append(f"[{vorspann_idx}:a]atrim=0:{vorspann_len:.4f},asetpts=PTS-STARTPTS[vorspann]")
+            audio_parts.append(f"[{vorspann_idx}:a]anull[vorspann]")
             mix_labels.append("vorspann")
 
         if len(mix_labels) > 1:
             mix_inputs = "".join(f"[{lbl}]" for lbl in mix_labels)
-            audio_parts.append(f"{mix_inputs}amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=0:normalize=0[aout]")
+            audio_parts.append(f"{mix_inputs}amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=0[aout]")
         else:
             # Einfacher Fall: nur Musik, kein Outro/Vorspann-Ton -> [mus] direkt als [aout]
             audio_parts = [mus_chain.replace("[mus]", "[aout]")]
@@ -1175,7 +1148,7 @@ def render_video(
         use_title = bool(title_overlay and title_text)
         if use_title:
             txt_filter = build_title_overlay_filter(
-                title_text, out_w, out_h, intro_offset=vorspann_len + intro_len
+                title_text, out_w, out_h, intro_offset=intro_len
             )
             filter_complex = f"[0:v]{txt_filter}[vt];{a_filter}"
             video_map = "[vt]"
@@ -1191,7 +1164,7 @@ def render_video(
             cmd_mux += ["-i", inp]
         cmd_mux += ["-filter_complex", filter_complex, "-map", video_map, "-map", "[aout]"]
         cmd_mux += vcodec_args
-        cmd_mux += ["-c:a", "aac", "-b:a", "192k", "-t", f"{music_dur:.4f}", str(out_path)]
+        cmd_mux += ["-c:a", "aac", "-b:a", "192k", str(out_path)]
         run_hidden(cmd_mux)
 
         if progress_cb:
@@ -1211,7 +1184,6 @@ def render_video(
             "title_overlay": title_overlay,
             "title_text":    title_text,
             "intro_len":     intro_len,
-            "title_offset":  vorspann_len + intro_len,
             "out_w":         out_w,
             "out_h":         out_h,
             "shorts_limited":shorts_limited,
@@ -1219,8 +1191,6 @@ def render_video(
             "outro_src":     str(outro_src) if outro_src is not None else None,
             "vorspann_src":  str(vorspann_src) if vorspann_src is not None else None,
             "vorspann_len":  vorspann_len,
-            "outro_len":     outro_len,
-            "music_play_dur":music_play_dur,
         }
         return (len(used_videos), len(used_photos), cuts_total, seg_meta, render_info)
 
@@ -1236,7 +1206,7 @@ ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
-app.title("Musik Video Generator  v2.5")
+app.title("Musik Video Generator  v2.6")
 app.geometry("960x720")
 app.minsize(960, 720)
 
@@ -2831,21 +2801,36 @@ def _do_reorder(audio_path: str, out_path: Path):
             app.after(0, _set_progress_ed, 0.6)
 
             music_dur      = ri.get("music_dur", ffprobe_duration(Path(audio_path)))
-            music_play_dur = ri.get("music_play_dur", music_dur)
             shorts_limited = ri.get("shorts_limited", False)
 
             if shorts_limited:
-                fade_start, fade_d = compute_fade(music_play_dur)
+                fade_start, fade_d = compute_fade(music_dur)
                 a_chain = (
-                    f"atrim=0:{music_play_dur:.4f},"
+                    f"atrim=0:{music_dur:.4f},"
                     f"afade=t=out:st={fade_start:.4f}:d={fade_d:.4f},"
                     "asetpts=PTS-STARTPTS"
                 )
             else:
-                a_chain = f"atrim=0:{music_play_dur:.4f},asetpts=PTS-STARTPTS"
+                a_chain = f"atrim=0:{music_dur:.4f},asetpts=PTS-STARTPTS"
+
+            # Vorspann-Audio nur wenn das Vorspann-Segment das ERSTE ist (nicht verschoben)
+            # UND die Original-Vorspann-Quelle noch existiert und Ton hat.
+            first_seg = timeline_seg_meta[_timeline_order[0]]
+            first_label = first_seg.get("label", "")
+            vorspann_audio_path = None
+            music_delay_ms = 0
+            if first_label.startswith("Vorspann:"):
+                orig_vorspann = ri.get("vorspann_src")
+                if orig_vorspann:
+                    orig_vorspann_path = Path(orig_vorspann)
+                    if orig_vorspann_path.exists() and has_audio_stream(orig_vorspann_path):
+                        vorspann_audio_path = orig_vorspann_path
+                        music_delay_ms = round(ri.get("vorspann_len", 0.0) * 1000)
 
             # Outro-Audio nur wenn das Outro-Segment das LETZTE ist (nicht verschoben)
             # UND die Original-Outro-Quelle noch existiert und Ton hat.
+            # Delay = Pre-Intro-Länge + Musiklänge, damit der Zeitpunkt auch mit aktivem
+            # Pre-Intro stimmt — nicht nur music_dur.
             last_seg = timeline_seg_meta[_timeline_order[-1]]
             last_label = last_seg.get("label", "")
             outro_audio_path = None
@@ -2856,21 +2841,7 @@ def _do_reorder(audio_path: str, out_path: Path):
                     orig_outro_path = Path(orig_outro)
                     if orig_outro_path.exists() and has_audio_stream(orig_outro_path):
                         outro_audio_path = orig_outro_path
-                        outro_delay_ms = round((music_dur - ri.get("outro_len", 0.0)) * 1000)
-
-            # Vorspann-Audio nur wenn das Vorspann-Segment das ERSTE ist (nicht verschoben)
-            # UND die Original-Vorspann-Quelle noch existiert und Ton hat.
-            first_seg = timeline_seg_meta[_timeline_order[0]]
-            first_label = first_seg.get("label", "")
-            vorspann_audio_path = None
-            music_delay_ms = 0
-            if first_label.startswith("Vorspann:"):
-                music_delay_ms = round(ri.get("vorspann_len", 0.0) * 1000)
-                orig_vorspann = ri.get("vorspann_src")
-                if orig_vorspann:
-                    orig_vorspann_path = Path(orig_vorspann)
-                    if orig_vorspann_path.exists() and has_audio_stream(orig_vorspann_path):
-                        vorspann_audio_path = orig_vorspann_path
+                        outro_delay_ms = music_delay_ms + round(music_dur * 1000)
 
             temp_out = temp_dir / "final.mp4"
 
@@ -2881,7 +2852,7 @@ def _do_reorder(audio_path: str, out_path: Path):
                     ri["title_text"],
                     ri.get("out_w", 1920),
                     ri.get("out_h", 1080),
-                    intro_offset=ri.get("title_offset", ri.get("intro_len", 0.0))
+                    intro_offset=ri.get("intro_len", 0.0)
                 )
 
             # ----- Filter-Complex dynamisch zusammenbauen (wie im Haupt-Render) -----
@@ -2906,18 +2877,16 @@ def _do_reorder(audio_path: str, out_path: Path):
             audio_parts = [mus_chain]
             mix_labels = ["mus"]
             if outro_idx is not None:
-                editor_outro_len = ri.get("outro_len", 0.0)
-                audio_parts.append(f"[{outro_idx}:a]atrim=0:{editor_outro_len:.4f},asetpts=PTS-STARTPTS,adelay={outro_delay_ms}|{outro_delay_ms}[outro]")
+                audio_parts.append(f"[{outro_idx}:a]adelay={outro_delay_ms}|{outro_delay_ms}[outro]")
                 mix_labels.append("outro")
             if vorspann_idx is not None:
-                editor_vorspann_len = ri.get("vorspann_len", 0.0)
-                audio_parts.append(f"[{vorspann_idx}:a]atrim=0:{editor_vorspann_len:.4f},asetpts=PTS-STARTPTS[vorspann]")
+                audio_parts.append(f"[{vorspann_idx}:a]anull[vorspann]")
                 mix_labels.append("vorspann")
 
             if len(mix_labels) > 1:
                 mix_inputs = "".join(f"[{lbl}]" for lbl in mix_labels)
                 audio_parts.append(
-                    f"{mix_inputs}amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=0:normalize=0[aout]"
+                    f"{mix_inputs}amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=0[aout]"
                 )
             else:
                 audio_parts = [mus_chain.replace("[mus]", "[aout]")]
@@ -2939,7 +2908,7 @@ def _do_reorder(audio_path: str, out_path: Path):
                 cmd += ["-i", inp]
             cmd += ["-filter_complex", filter_complex, "-map", video_map, "-map", "[aout]"]
             cmd += vcodec_args
-            cmd += ["-c:a", "aac", "-b:a", "192k", "-t", f"{music_dur:.4f}", str(temp_out)]
+            cmd += ["-c:a", "aac", "-b:a", "192k", str(temp_out)]
             run_hidden(cmd)
 
             shutil.copyfile(temp_out, out_path)
