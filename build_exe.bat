@@ -1,14 +1,19 @@
 @echo off
 echo.
 echo  ============================================
-echo   Musik Video Generator v2.3 - EXE Build
+echo   Musik Video Generator v2.8 - EXE Build
 echo  ============================================
+echo.
+
+echo  Abhaengigkeiten werden geprueft ...
+py -3.12 -m pip install --upgrade "yt-dlp[default]" pyinstaller
 echo.
 
 py -3.12 -m PyInstaller ^
   --noconfirm ^
   --onefile ^
   --windowed ^
+  --collect-all yt_dlp ^
   --icon="C:\Projekt\icon.ico" ^
   --name="MVG" ^
   --add-data="C:\Projekt\ffmpeg;ffmpeg" ^

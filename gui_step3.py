@@ -1,4 +1,4 @@
-# Musik Video Generator v2.6
+# Musik Video Generator v2.8
 
 from __future__ import annotations
 
@@ -215,6 +215,7 @@ FPS = 30
 OUT_W_NORMAL, OUT_H_NORMAL = 1920, 1080
 OUT_W_SHORTS, OUT_H_SHORTS = 1080, 1920
 SHORTS_MAX_SEC = 58.0
+SHORTS_FADE_IN_SEC = 0.6   # weiches Einblenden (Bild + Ton) beim Short
 SHORTS_FADE_SEC = 2.0
 
 CUT_SECONDS_GENTLE = 3.50
@@ -245,7 +246,21 @@ def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def get_output_path_from_music(music_path: str) -> Path:
+# Formate: Schlüssel -> (Anzeigename, Dateiname-Zusatz)
+FORMAT_ORDER = ["normal", "shorts", "shorts58"]
+FORMAT_LABELS = {
+    "normal": "16:9",
+    "shorts": "9:16",
+    "shorts58": "Short 58s",
+}
+FORMAT_SUFFIX = {
+    "normal": "",
+    "shorts": "_9x16",
+    "shorts58": "_Short",
+}
+
+
+def get_output_path_from_music(music_path: str, fmt: str = "normal") -> Path:
     stem = Path(music_path).stem
     bad = '<>:"/\\|?*'
     for ch in bad:
@@ -253,7 +268,7 @@ def get_output_path_from_music(music_path: str) -> Path:
     stem = stem.rstrip(".").strip()
     if not stem:
         stem = "output"
-    return OUTPUT_DIR / f"{stem}.mp4"
+    return OUTPUT_DIR / f"{stem}{FORMAT_SUFFIX.get(fmt, '')}.mp4"
 
 
 def get_title_from_music(music_path: str) -> str:
@@ -544,7 +559,7 @@ def open_help():
     win = ctk.CTkToplevel(app)
     win.title("Kurzanleitung")
 
-    win_w, win_h = 560, 600
+    win_w, win_h = 560, 690
     app.update_idletasks()
     x = app.winfo_x() + (app.winfo_width() - win_w) // 2
     y = app.winfo_y() + (app.winfo_height() - win_h) // 2
@@ -579,7 +594,9 @@ def open_help():
     )
     section(
         "2. Musik & Format",
-        "Musikdatei wählen, Format und Schnittgeschwindigkeit festlegen."
+        "Musikdatei wählen, Format(e) und Schnittgeschwindigkeit festlegen. "
+        "Mehrfachauswahl möglich: Standard ist 16:9-Video plus 58-s-Short "
+        "(stärkster Songabschnitt, ohne Intro/Outro)."
     )
     section(
         "3. Clip-Quelle",
@@ -593,13 +610,18 @@ def open_help():
     )
     section(
         "5. Clip-Editor (optional)",
-        "Reihenfolge der Clips per Drag & Drop anpassen, dann "
-        "'Übernehmen' — ohne kompletten Neu-Render."
+        "Clips per Drag & Drop umsortieren oder mit '✕ Entfernen' durch "
+        "einen Ersatzclip gleicher Länge austauschen, dann 'Übernehmen'."
     )
     section(
         "6. Fertiges Video",
         "Über 'Video anschauen', 'Output-Ordner' oder 'YouTube' direkt "
         "weiterverwenden."
+    )
+    section(
+        "7. Short per URL",
+        "YouTube-Link kopieren, dann 'Short per URL' klicken: Es entsteht ein "
+        "45-s-Short (9:16, Originalton, stärkster Abschnitt) in output/Shorts."
     )
 
     ctk.CTkButton(win, text="PDF-Anleitung öffnen", width=180,
@@ -648,7 +670,7 @@ def build_title_overlay_filter(
     """
     import re
     # Nur sichere Zeichen behalten: Buchstaben, Zahlen, Leerzeichen, - _
-    safe = re.sub(r"[^A-Za-z0-9äöüÄÖÜßáéíóúàèìòùâêîôûãõñüïëÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÑÜÏË \-_]", " ", title).strip()
+    safe = re.sub(r"[^\w \-]", " ", title).replace("_", " ").strip()
     # FFmpeg drawtext: Leerzeichen und Sonderzeichen escapen
     safe = safe.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
 
@@ -671,19 +693,187 @@ def build_title_overlay_filter(
         f"if(lt({t_rel},{display:.2f}),1,0)))"
     )
 
+    # Schrift: Arial Bold (auf jedem Windows vorhanden, alle Akzentzeichen), sonst Fallbacks
+    font_part = ""
+    win_dir = os.environ.get("WINDIR", "C:\\Windows")
+    for fname in ("arialbd.ttf", "arial.ttf", "segoeuib.ttf", "segoeui.ttf"):
+        fpath = Path(win_dir) / "Fonts" / fname
+        if fpath.exists():
+            ff = fpath.as_posix().replace(":", "\\:")
+            font_part = f":fontfile='{ff}'"
+            break
+
     return (
         f"drawtext=text='{safe}'"
+        f"{font_part}"
         f":fontsize={font_size}"
         f":fontcolor=white"
         f":alpha='{alpha_expr}'"
         f":x={margin_x}"
         f":y={y_pos}"
-        f":shadowcolor=black@0.75"
-        f":shadowx=3:shadowy=3"
+        f":shadowcolor=black@0.6"
+        f":shadowx=2:shadowy=2"
     )
 
 
+def choose_short_start(audio_path: str, duration: float, win: float = SHORTS_MAX_SEC) -> Tuple[float, str]:
+    """
+    Sucht den "stärksten" Abschnitt (wiederkehrende Harmonien + Energie) für den Short.
+    Gibt (Startsekunde, Beschreibung) zurück. Bei unklarem Ergebnis: Start bei 0.
+    Idee nach audio_selection.py des Shorts-Tools.
+    """
+    RATE, STEP = 11025, 0.5
+    if duration <= win + 10:
+        return 0.0, "Songanfang (Song kurz)"
+    try:
+        samples, _ = librosa.load(audio_path, sr=RATE, mono=True)
+        samples = np.asarray(samples, dtype=np.float32)
+        if samples.size < RATE * (win + 10) or not np.isfinite(samples).all():
+            return 0.0, "Songanfang"
+        size, hop = 2048, 512
+        frames = np.lib.stride_tricks.sliding_window_view(samples, size)[::hop]
+        spectrum = np.abs(np.fft.rfft(frames * np.hanning(size), axis=1))
+        freqs = np.fft.rfftfreq(size, 1 / RATE)
+        valid = (freqs >= 80) & (freqs <= 4000)
+        pitch = np.round(69 + 12 * np.log2(freqs[valid] / 440)).astype(int) % 12
+        chroma = np.stack([spectrum[:, valid][:, pitch == k].sum(axis=1) for k in range(12)], axis=1)
+        rms = np.sqrt((frames ** 2).mean(axis=1))
+        if np.max(rms) < 0.001:
+            return 0.0, "Songanfang"
+        bins = (np.arange(len(frames)) * hop / RATE / STEP).astype(int)
+        n = int(bins[-1]) + 1
+        counts = np.maximum(np.bincount(bins, minlength=n), 1)
+        feats = np.stack([np.bincount(bins, weights=chroma[:, k], minlength=n) / counts for k in range(12)], axis=1)
+        energy = np.bincount(bins, weights=rms, minlength=n) / counts
+        feats /= np.maximum(feats.sum(axis=1, keepdims=True), 1e-8)
+        feats -= feats.mean(axis=0, keepdims=True)
+        width = 16
+        tpl = np.lib.stride_tricks.sliding_window_view(feats, width, axis=0)[::2].reshape(-1, 12 * width)
+        tpl = tpl / np.maximum(np.linalg.norm(tpl, axis=1)[:, None], 1e-8)
+        times = np.arange(len(tpl)) * 2 * STEP
+        repeat = np.zeros(len(tpl))
+        for off in range(0, len(tpl), 128):
+            sim = tpl[off:off + 128] @ tpl.T
+            sim[np.abs(times[off:off + 128, None] - times[None, :]) < 25] = -1
+            repeat[off:off + 128] = np.maximum(0, sim.max(axis=1))
+        if repeat.max(initial=0) < 0.8:
+            return 0.0, "Songanfang (kein klares Muster)"
+        cands = np.arange(5, max(6, int(duration - win) + 1), dtype=float)
+        peak = np.percentile(energy, 90)
+        scores = []
+        for st in cands:
+            e = energy[int(st / STEP):int((st + win) / STEP)]
+            r = repeat[(times >= st) & (times <= st + win * 0.8)]
+            if not len(e) or not len(r):
+                scores.append(-1.0)
+                continue
+            act = np.mean(e > peak * 0.2)
+            strength = min(1.0, np.mean(e) / max(peak, 1e-8))
+            rec = np.mean(np.maximum(0, r - 0.65) / 0.35)
+            scores.append((0.7 * rec + 0.3 * strength) * act)
+        best = int(np.argmax(scores))
+        if scores[best] < 0.35:
+            return 0.0, "Songanfang (Analyse nicht eindeutig)"
+        return float(min(max(0.0, cands[best]), duration - win)), "stärkster Abschnitt"
+    except Exception:
+        return 0.0, "Songanfang"
+
+
 # --------------------- Render Engine ---------------------
+def render_clip_segment(
+    kind: str,
+    src: Path,
+    out_seg: Path,
+    seg_len: float,
+    vf: str,
+    frames: Optional[int] = None,
+) -> None:
+    """
+    Rendert EIN stummes Segment (Foto oder Video) im Zielformat.
+    Wird vom Haupt-Render und vom Clip-Ersetzen im Editor gemeinsam genutzt.
+    frames: optional exakte Bildanzahl (Ersatz-Segmente müssen bildgenau gleich lang sein).
+    """
+    frames_args = ["-frames:v", str(int(frames))] if frames else []
+
+    if kind == "photo":
+        cmd = [
+            ffmpeg_cmd(), "-y", "-hide_banner",
+            "-loop", "1",
+            "-i", str(src),
+            "-t", f"{seg_len:.4f}",
+            "-vf", vf,
+            "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-crf", "18", "-preset", "veryfast",
+            "-r", str(FPS), "-fps_mode", "cfr",
+        ] + frames_args + [str(out_seg)]
+    else:
+        clip_dur = ffprobe_duration(src)
+        max_start = max(0.0, clip_dur - seg_len - 0.05)
+        start = random.uniform(0.0, max_start) if max_start > 0 else 0.0
+
+        # Clip loopen falls er kürzer als das Segment ist
+        loop_flag = ["-stream_loop", "-1"] if clip_dur < seg_len + 0.1 else []
+        cmd = [
+            ffmpeg_cmd(), "-y", "-hide_banner", "-fflags", "+genpts",
+        ] + loop_flag + [
+            "-ss", f"{start:.4f}",
+            "-i", str(src),
+            "-t", f"{seg_len:.4f}",
+            "-vf", vf,
+            "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-crf", "18", "-preset", "veryfast",
+            "-fps_mode", "cfr",
+        ] + frames_args + [str(out_seg)]
+    run_hidden(cmd)
+
+
+def build_replacement_segment(
+    old_seg: Path,
+    old_src: Optional[str],
+    used_srcs: set,
+    pool: list,
+    vf: str,
+    out_seg: Path,
+) -> dict:
+    """
+    Ersetzt ein Clip-Segment durch einen neuen Zufallsclip GLEICHER Länge (bildgenau),
+    damit das Video weiterhin exakt so lang bleibt wie der Song.
+    pool: Liste von {"kind": "video"|"photo", "path": str} — die Quellen des Renders.
+    Gibt die neuen Meta-Felder zurück: path, label, src, kind.
+    """
+    old_dur = ffprobe_duration(old_seg)
+    frames = max(1, int(round(old_dur * FPS)))
+    seg_len = frames / FPS
+
+    existing = [c for c in pool if Path(c["path"]).exists()]
+    videos_exist = any(c["kind"] == "video" for c in existing)
+    cands = [
+        c for c in existing
+        if c["path"] != old_src
+        and not (c["kind"] == "photo" and videos_exist and seg_len < MIN_PHOTO_SEC)
+    ]
+    if not cands:
+        raise RuntimeError("Keine alternativen Clips verfügbar.")
+    fresh = [c for c in cands if c["path"] not in used_srcs]
+    choice = random.choice(fresh or cands)
+
+    src = Path(choice["path"])
+    if choice["kind"] == "photo":
+        render_clip_segment("photo", src, out_seg, seg_len, vf, frames=frames)
+    else:
+        prepared = normalize_to_cache_video_only(src) if needs_normalize(src) else src
+        render_clip_segment("video", prepared, out_seg, seg_len, vf, frames=frames)
+
+    return {
+        "path": str(out_seg),
+        "label": src.stem,
+        "src": choice["path"],
+        "kind": choice["kind"],
+    }
+
+
 def render_video(
     audio_path: str,
     clips_folder: Path,
@@ -704,7 +894,17 @@ def render_video(
     title_text: str = "",
     status_cb: Optional[Callable[[str], None]] = None,
     progress_cb: Optional[Callable[[float], None]] = None,
+    persist_segments: bool = True,
 ) -> Tuple[int, int, int, list[dict], dict]:
+
+    # Der 58s-Short ist immer "pur": ohne Pre-Intro, Intro und Outro.
+    # (Das Outro würde sonst hinten angehängt und die 58 Sekunden sprengen,
+    #  ein Intro würde einen großen Teil der Zeit verbrauchen.)
+    if shorts_limited:
+        use_intro = False
+        use_outro = False
+        use_vorspann = False
+        title_overlay = False   # kein Titel im 58s-Short
 
     ext_vid: list[Path] = list_video_files(clips_folder) if external_clips_on else []
     ext_ph: list[Path] = list_image_files(photos_folder) if external_photos_on else []
@@ -747,6 +947,15 @@ def render_video(
 
     beat_times, music_dur_full = detect_beats(audio_path)
     music_dur = min(music_dur_full, SHORTS_MAX_SEC) if shorts_limited else music_dur_full
+    music_start = 0.0
+    if shorts_limited and music_dur_full > SHORTS_MAX_SEC + 10:
+        if status_cb:
+            status_cb("Suche stärksten Abschnitt für den Short…")
+        music_start, _why = choose_short_start(audio_path, music_dur_full)
+        beat_times = [t - music_start for t in beat_times
+                      if music_start <= t < music_start + music_dur]
+        if status_cb:
+            status_cb(f"Short: {_why} ab {int(music_start)//60}:{int(music_start)%60:02d}")
 
     if speed == "gentle":
         target_seconds = CUT_SECONDS_GENTLE
@@ -798,11 +1007,17 @@ def render_video(
 
     temp_dir = Path(tempfile.mkdtemp(prefix="beatcut_"))
 
-    # Segmente persistent speichern für Timeline-Editor
-    for f in SEGMENTS_DIR.glob("seg*.mp4"):
-        try: f.unlink()
-        except Exception: pass
-    seg_dir = SEGMENTS_DIR
+    # Segmente persistent speichern für Timeline-Editor (nur beim Hauptvideo).
+    # Zusatzformate (z.B. der Short) rendern in einen temporären Ordner, damit sie
+    # die Segmente des Hauptvideos nicht überschreiben.
+    if persist_segments:
+        for f in SEGMENTS_DIR.glob("seg*.mp4"):
+            try: f.unlink()
+            except Exception: pass
+        seg_dir = SEGMENTS_DIR
+    else:
+        seg_dir = temp_dir / "segments"
+        seg_dir.mkdir(parents=True, exist_ok=True)
 
     prepared_video_only: dict[Path, Path] = {}
 
@@ -816,6 +1031,7 @@ def render_video(
     segments_files: list[Path] = []
     seg_durations: list[float] = []
     seg_labels: list[str] = []
+    seg_src_info: list[Optional[dict]] = []   # pro Segment: {"kind","src"} oder None (Intro/Outro/Pre-Intro)
     used_videos: set[Path] = set()
     used_photos: set[Path] = set()
 
@@ -864,6 +1080,7 @@ def render_video(
             segments_files.append(out_seg)
             seg_durations.append(float(vorspann_len))
             seg_labels.append(f"Vorspann: {vorspann_src.stem}")
+            seg_src_info.append(None)
 
         # Intro
         if intro_src is not None and intro_len > 0.0:
@@ -895,6 +1112,7 @@ def render_video(
             segments_files.append(out_seg)
             seg_durations.append(float(intro_len))
             seg_labels.append(f"Intro: {intro_src.stem}")
+            seg_src_info.append(None)
 
         # Cut-Punkte für die Musik-Clips werden ERST JETZT berechnet — mit der tatsächlich
         # gerenderten Intro-Länge, nicht der angeforderten. So bleibt die Gesamtlänge korrekt.
@@ -974,52 +1192,21 @@ def render_video(
                     consec_photos = 0
                     last_item = (chosen_kind, chosen_path)
 
-            # Segment rendern
+            # Segment rendern (gemeinsame Funktion, auch für Clip-Ersetzen im Editor)
             if chosen_kind == "photo":
                 img = chosen_path
                 used_photos.add(img)
-
-                cmd = [
-                    ffmpeg_cmd(), "-y", "-hide_banner",
-                    "-loop", "1",
-                    "-i", str(img),
-                    "-t", f"{seg_len_out:.4f}",
-                    "-vf", vf,
-                    "-an",
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                    "-crf", "18", "-preset", "veryfast",
-                    "-r", str(FPS), "-fps_mode", "cfr",
-                    str(out_seg)
-                ]
-                run_hidden(cmd)
+                render_clip_segment("photo", img, out_seg, seg_len_out, vf)
                 seg_labels.append(img.stem)
+                seg_src_info.append({"kind": "photo", "src": str(img)})
             else:
                 clip = chosen_path
                 last_vid = clip
                 used_videos.add(clip)
-
                 src = prepared_path_video_only(clip)
-                clip_dur = ffprobe_duration(src)
-                max_start = max(0.0, clip_dur - seg_len_out - 0.05)
-                start = random.uniform(0.0, max_start) if max_start > 0 else 0.0
-
-                # Clip loopen falls er kürzer als das Segment ist
-                loop_flag = ["-stream_loop", "-1"] if clip_dur < seg_len_out + 0.1 else []
-                cmd = [
-                    ffmpeg_cmd(), "-y", "-hide_banner", "-fflags", "+genpts",
-                    ] + loop_flag + [
-                    "-ss", f"{start:.4f}",
-                    "-i", str(src),
-                    "-t", f"{seg_len_out:.4f}",
-                    "-vf", vf,
-                    "-an",
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                    "-crf", "18", "-preset", "veryfast",
-                    "-fps_mode", "cfr",
-                    str(out_seg)
-                ]
-                run_hidden(cmd)
+                render_clip_segment("video", src, out_seg, seg_len_out, vf)
                 seg_labels.append(clip.stem)
+                seg_src_info.append({"kind": "video", "src": str(clip)})
 
             segments_files.append(out_seg)
             seg_durations.append(float(seg_len_out))
@@ -1035,7 +1222,7 @@ def render_video(
             if status_cb:
                 status_cb("Hänge Outro an…")
 
-            outro_seg = SEGMENTS_DIR / f"seg{seg_index:04d}.mp4"
+            outro_seg = seg_dir / f"seg{seg_index:04d}.mp4"
             seg_index += 1
             vf_outro = build_vf_base(out_w, out_h, "shorts" if is_shorts else "normal")
 
@@ -1053,6 +1240,7 @@ def render_video(
             segments_files.append(outro_seg)
             seg_durations.append(ffprobe_duration(outro_seg))
             seg_labels.append(f"Outro: {outro_src.stem}")
+            seg_src_info.append(None)
 
         if progress_cb:
             progress_cb(0.88)
@@ -1083,9 +1271,9 @@ def render_video(
         if shorts_limited:
             fade_start, fade_d = compute_fade(music_dur)
             a_chain = (
-                f"atrim=0:{music_dur:.4f},"
-                f"afade=t=out:st={fade_start:.4f}:d={fade_d:.4f},"
-                "asetpts=PTS-STARTPTS"
+                f"atrim={music_start:.4f}:{music_start + music_dur:.4f},asetpts=PTS-STARTPTS,"
+                f"afade=t=in:st=0:d={SHORTS_FADE_IN_SEC:.2f},"
+                f"afade=t=out:st={fade_start:.4f}:d={fade_d:.4f}"
             )
         else:
             a_chain = f"atrim=0:{music_dur:.4f},asetpts=PTS-STARTPTS"
@@ -1154,6 +1342,16 @@ def render_video(
             video_map = "[vt]"
             vcodec_args = ["-c:v", "libx264", "-pix_fmt", "yuv420p",
                             "-crf", "18", "-preset", "veryfast", "-fps_mode", "cfr"]
+        elif shorts_limited:
+            # Short = Ausschnitt aus der Songmitte -> weiches Ein- und Ausblenden (Bild)
+            _fs, _fd = compute_fade(music_dur)
+            filter_complex = (
+                f"[0:v]fade=t=in:st=0:d={SHORTS_FADE_IN_SEC:.2f},"
+                f"fade=t=out:st={_fs:.4f}:d={_fd:.4f}[vt];{a_filter}"
+            )
+            video_map = "[vt]"
+            vcodec_args = ["-c:v", "libx264", "-pix_fmt", "yuv420p",
+                            "-crf", "18", "-preset", "veryfast", "-fps_mode", "cfr"]
         else:
             filter_complex = a_filter
             video_map = "0:v:0"
@@ -1172,13 +1370,27 @@ def render_video(
         if status_cb:
             status_cb(f"Fertig: {out_path.name}")
 
-        seg_meta = [
-            {
+        seg_meta = []
+        for i, p in enumerate(segments_files):
+            info = seg_src_info[i] if i < len(seg_src_info) else None
+            entry = {
                 "path":  str(p),
                 "label": seg_labels[i] if i < len(seg_labels) else p.stem,
             }
-            for i, p in enumerate(segments_files)
-        ]
+            if info:                      # nur normale Clips sind ersetzbar
+                entry["kind"] = info["kind"]
+                entry["src"] = info["src"]
+            seg_meta.append(entry)
+
+        # Quellen-Pool für "Clip ersetzen" im Editor (Duplikate entfernt, Reihenfolge stabil)
+        replace_pool: list[dict] = []
+        _seen: set[str] = set()
+        for _p in list(ext_vid) + list(pool_vid):
+            if str(_p) not in _seen:
+                _seen.add(str(_p)); replace_pool.append({"kind": "video", "path": str(_p)})
+        for _p in ext_ph:
+            if str(_p) not in _seen:
+                _seen.add(str(_p)); replace_pool.append({"kind": "photo", "path": str(_p)})
         # Titel-Info + Outro/Vorspann-Quelle mitgeben, damit Re-Concat alles wiederholen kann
         render_info = {
             "title_overlay": title_overlay,
@@ -1188,9 +1400,12 @@ def render_video(
             "out_h":         out_h,
             "shorts_limited":shorts_limited,
             "music_dur":     music_dur,
+            "music_start":   music_start,
             "outro_src":     str(outro_src) if outro_src is not None else None,
             "vorspann_src":  str(vorspann_src) if vorspann_src is not None else None,
             "vorspann_len":  vorspann_len,
+            "is_shorts":     is_shorts,
+            "replace_pool":  replace_pool,
         }
         return (len(used_videos), len(used_photos), cuts_total, seg_meta, render_info)
 
@@ -1206,7 +1421,7 @@ ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
-app.title("Musik Video Generator  v2.6")
+app.title("Musik Video Generator  v2.8")
 app.geometry("960x720")
 app.minsize(960, 720)
 
@@ -1225,7 +1440,9 @@ music_var = ctk.StringVar(value="(keine Musik gewählt)")
 clips_var = ctk.StringVar(value=str(DEFAULT_CLIPS_DIR))
 photos_var = ctk.StringVar(value=str(PHOTOS_DIR))
 
-format_var = ctk.StringVar(value="normal")   # "normal" | "shorts" | "shorts58"
+# Formate sind mehrfach wählbar. Standard: normales Video + 58s-Short.
+FORMAT_DEFAULTS = {"normal": True, "shorts": False, "shorts58": True}
+format_vars = {k: ctk.BooleanVar(value=v) for k, v in FORMAT_DEFAULTS.items()}
 speed_var = ctk.StringVar(value="normal")
 
 intro_var = ctk.BooleanVar(value=True)
@@ -1274,11 +1491,9 @@ def ui_progress(val: float):
         pass
 
 
-def is_shorts_mode() -> bool:
-    return format_var.get() in ("shorts", "shorts58")
-
-def is_shorts_limited() -> bool:
-    return format_var.get() == "shorts58"
+def selected_formats() -> list[str]:
+    """Gewählte Formate in fester Reihenfolge (normal, shorts, shorts58)."""
+    return [k for k in FORMAT_ORDER if bool(format_vars[k].get())]
 
 
 def selected_moods() -> list[str]:
@@ -1323,8 +1538,8 @@ def refresh_count():
 
 def update_output_label():
     if music_file:
-        out = get_output_path_from_music(music_file)
-        out_name_var.set(f"Output: {out.name}")
+        names = [get_output_path_from_music(music_file, k).name for k in selected_formats()]
+        out_name_var.set("Output: " + "  +  ".join(names))
     else:
         out_name_var.set("Output: (Musik auswählen)")
 
@@ -1390,7 +1605,6 @@ def update_active_button_colors():
         return
     active = "#1f6aa5"
     is_std = (not bool(external_var.get()) and not bool(photos_mode_var.get()))
-    btn_standard.configure(fg_color=active if is_std else BTN_DEFAULT_FG)
     btn_external.configure(fg_color=active if bool(external_var.get()) else BTN_DEFAULT_FG)
     btn_photos.configure(fg_color=active if bool(photos_mode_var.get()) else BTN_DEFAULT_FG)
 
@@ -1454,6 +1668,156 @@ def choose_photos_folder():
         on_photos_toggle()
 
 
+# --------------------- Short per URL (YouTube-Link aus der Zwischenablage) ---------------------
+URL_SHORT_SEC = 45
+URL_SHORT_FILTER = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+YT_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "music.youtube.com")
+_url_short_busy = False
+
+
+def _ensure_deno() -> Optional[Path]:
+    """yt-dlp braucht für YouTube eine JS-Laufzeit (Deno). Einmalig automatisch laden."""
+    tools = BASE_DIR / "tools"
+    target = tools / "deno.exe"
+    if target.exists() or os.name != "nt":
+        return target if target.exists() else None
+    import io, zipfile, urllib.request
+    tools.mkdir(exist_ok=True)
+    url = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
+    with urllib.request.urlopen(url, timeout=120) as resp:
+        data = resp.read()
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        target.write_bytes(zf.read("deno.exe"))
+    return target
+
+
+def render_url_short(source: Path, target: Path, start: float, update: Callable[[str], None]) -> None:
+    """45 s im 9:16-Format mit Originalton aus der Quelldatei."""
+    fs, fd = compute_fade(URL_SHORT_SEC)
+    fin = SHORTS_FADE_IN_SEC
+    vf = (f"{URL_SHORT_FILTER},fade=t=in:st=0:d={fin:.2f},"
+          f"fade=t=out:st={fs:.4f}:d={fd:.4f}")
+    af = f"afade=t=in:st=0:d={fin:.2f},afade=t=out:st={fs:.4f}:d={fd:.4f}"
+    cmd = [ffmpeg_cmd(), "-hide_banner", "-y", "-ss", f"{start:.3f}", "-i", str(source),
+           "-t", str(URL_SHORT_SEC), "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf, "-af", af,
+           "-r", "30", "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+           "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(target)]
+    update("Short wird erstellt …")
+    run_hidden(cmd)
+
+
+def pick_url_short_start(source: Path, duration: float, update: Callable[[str], None]) -> float:
+    """Stärksten Abschnitt im Ton suchen; sonst die Mitte des Videos."""
+    fallback = max(0.0, (duration - URL_SHORT_SEC) / 2)
+    if duration > 1800:
+        return fallback
+    update("Musik wird analysiert …")
+    wav = Path(tempfile.gettempdir()) / f"mvg_urlshort_{os.getpid()}.wav"
+    try:
+        subprocess.run([ffmpeg_cmd(), "-y", "-v", "error", "-i", str(source), "-vn",
+                        "-ac", "1", "-ar", "11025", str(wav)],
+                       check=True, creationflags=CREATE_NO_WINDOW, timeout=180)
+        start, why = choose_short_start(str(wav), duration, win=URL_SHORT_SEC)
+        return fallback if why.startswith("Songanfang") else start
+    except Exception:
+        return fallback
+    finally:
+        try:
+            wav.unlink()
+        except Exception:
+            pass
+
+
+def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
+    from urllib.parse import urlsplit
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or parsed.hostname not in YT_HOSTS:
+        raise ValueError("In der Zwischenablage ist kein gültiger YouTube-Link.")
+    try:
+        import yt_dlp  # type: ignore
+    except ImportError:
+        raise RuntimeError("yt-dlp ist nicht installiert (pip install yt-dlp).")
+
+    update("YouTube-Werkzeug wird geprüft …")
+    deno = _ensure_deno()
+    out_dir = OUTPUT_DIR / "Shorts"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def progress(d):
+        if d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            pct = f" {int(d.get('downloaded_bytes', 0) * 100 / total)}%" if total else ""
+            update("Video wird geladen …" + pct)
+
+    with tempfile.TemporaryDirectory(prefix="mvg-short-") as tmp:
+        opts = {"noplaylist": True, "quiet": True, "no_warnings": True,
+                "format": "bv*[height<=1920]+ba/b[height<=1920]",
+                "outtmpl": str(Path(tmp) / "source.%(ext)s"),
+                "merge_output_format": "mp4", "progress_hooks": [progress]}
+        ff = Path(ffmpeg_cmd())
+        if ff.is_absolute() and ff.exists():
+            opts["ffmpeg_location"] = str(ff.parent)
+        if deno:
+            opts["js_runtimes"] = {"deno": {"path": str(deno)}}
+        update("Video wird geprüft …")
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info.get("is_live") or info.get("_type") == "playlist":
+                raise ValueError("Bitte ein einzelnes, abgeschlossenes Video verwenden.")
+            dur = float(info.get("duration") or 0)
+            if dur < URL_SHORT_SEC:
+                raise ValueError(f"Das Video muss mindestens {URL_SHORT_SEC} Sekunden lang sein.")
+            ydl.download([url])
+        srcs = [q for q in Path(tmp).iterdir() if q.suffix.lower() in (".mp4", ".webm", ".mkv", ".mov")]
+        if len(srcs) != 1:
+            raise RuntimeError("Die heruntergeladene Videodatei wurde nicht gefunden.")
+        start = pick_url_short_start(srcs[0], dur, update)
+        target = out_dir / f"Short_{info.get('id', 'video')}.mp4"
+        render_url_short(srcs[0], target, start, update)
+    return target
+
+
+def on_short_url_click():
+    """Button 'Short per URL': YouTube-Link aus der Zwischenablage -> 45-s-Short (9:16)."""
+    global _url_short_busy
+    if _url_short_busy:
+        return
+    try:
+        url = app.clipboard_get().strip()
+    except Exception:
+        url = ""
+    if not url:
+        ui_status("Zwischenablage leer – bitte zuerst einen YouTube-Link kopieren")
+        return
+    _url_short_busy = True
+    try:
+        btn_standard.configure(state="disabled")
+    except Exception:
+        pass
+
+    def upd(t: str):
+        app.after(0, ui_status, t)
+
+    def worker():
+        global _url_short_busy
+        try:
+            path = generate_short_from_url(url, upd)
+            app.after(0, ui_status, f"Short fertig: {path.name}  (Ordner output/Shorts)")
+            app.after(0, lambda: open_path_portable(path.parent))
+        except Exception as e:
+            msg = str(e)
+            app.after(0, ui_status, "Short per URL fehlgeschlagen")
+            app.after(0, lambda: messagebox.showerror("Short per URL", msg))
+        finally:
+            _url_short_busy = False
+            try:
+                app.after(0, lambda: btn_standard.configure(state="normal"))
+            except Exception:
+                pass
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
 def use_standard_clips():
     external_var.set(False)
     photos_mode_var.set(False)
@@ -1476,15 +1840,15 @@ def on_outro_toggle():
     update_output_label()
 
 
-def on_format_change():
+def on_format_change(changed: Optional[str] = None):
+    # Mindestens ein Format muss aktiv bleiben
+    if not selected_formats():
+        format_vars[changed or "normal"].set(True)
+        update_output_label()
+        ui_status("Mindestens ein Format muss aktiv sein")
+        return
     update_output_label()
-    v = format_var.get()
-    if v == "shorts58":
-        ui_status("Shorts 9:16 · max 58s (Social Media)")
-    elif v == "shorts":
-        ui_status("Normal 9:16 · volle Länge")
-    else:
-        ui_status("Normal-Modus (16:9)")
+    ui_status("Formate: " + " + ".join(FORMAT_LABELS[k] for k in selected_formats()))
 
 
 def open_output_folder():
@@ -1508,7 +1872,7 @@ def disable_controls(disabled: bool):
     state = "disabled" if disabled else "normal"
     for w in [
         btn_music, btn_reset, btn_help,
-        rb_fmt_normal, rb_fmt_shorts, rb_fmt_shorts58,
+        cb_fmt_normal, cb_fmt_shorts, cb_fmt_shorts58,
         rb_gentle, rb_normal, rb_random,
         rb_slow, rb_fast,
         opt_pool,
@@ -1580,7 +1944,8 @@ def on_reset_clicked():
     last_output_path = None
     music_var.set("(keine Musik gewählt)")
 
-    format_var.set("normal")
+    for _k, _v in FORMAT_DEFAULTS.items():
+        format_vars[_k].set(_v)
     speed_var.set("normal")
     intro_var.set(True)
     outro_var.set(True)
@@ -1623,9 +1988,13 @@ def do_render():
         ui_status("bitte Musik auswählen")
         return
 
-    shorts = is_shorts_mode()
-    limited = is_shorts_limited()
-    out_path = get_output_path_from_music(music_file)
+    # Ein Auftrag pro gewähltem Format. Das erste (normal > 9:16 > Short) ist das
+    # Hauptvideo: nur dafür bleiben die Segmente für den Clip-Editor erhalten.
+    jobs = [(k, get_output_path_from_music(music_file, k)) for k in selected_formats()]
+    if not jobs:
+        ui_status("Mindestens ein Format muss aktiv sein")
+        return
+    out_path = jobs[0][1]
     last_output_path = out_path
     update_output_label()
 
@@ -1664,29 +2033,59 @@ def do_render():
 
     def worker():
         try:
-            _nv, _np, _ct, seg_meta, render_info = render_video(
-                audio_path=music_file,
-                clips_folder=clips_folder,
-                photos_folder=photos_folder,
-                out_path=out_path,
-                use_intro=use_intro,
-                use_outro=use_outro,
-                use_vorspann=use_vorspann,
-                speed=speed,
-                pool_value=pool_value,
-                pool_on=pool_on,
-                external_clips_on=ext_clips_on,
-                external_photos_on=ext_photos_on,
-                is_shorts=shorts,
-                shorts_limited=limited,
-                moods_selected=moods,
-                title_overlay=use_title,
-                title_text=title_text,
-                status_cb=lambda s: app.after(0, ui_status, s),
-                progress_cb=lambda p: app.after(0, ui_progress, p),
-            )
+            n = len(jobs)
+            main_result = None
+            failed: list[str] = []
+
+            for idx, (fmt, fmt_out) in enumerate(jobs):
+                prefix = f"[{idx + 1}/{n} · {FORMAT_LABELS[fmt]}]  " if n > 1 else ""
+
+                def st(text, prefix=prefix):
+                    app.after(0, ui_status, prefix + text)
+
+                def pr(p, idx=idx):
+                    # Gesamtfortschritt über alle Formate
+                    app.after(0, ui_progress, (idx + p) / n)
+
+                try:
+                    result = render_video(
+                        audio_path=music_file,
+                        clips_folder=clips_folder,
+                        photos_folder=photos_folder,
+                        out_path=fmt_out,
+                        use_intro=use_intro,
+                        use_outro=use_outro,
+                        use_vorspann=use_vorspann,
+                        speed=speed,
+                        pool_value=pool_value,
+                        pool_on=pool_on,
+                        external_clips_on=ext_clips_on,
+                        external_photos_on=ext_photos_on,
+                        is_shorts=(fmt != "normal"),
+                        shorts_limited=(fmt == "shorts58"),
+                        moods_selected=moods,
+                        title_overlay=use_title,
+                        title_text=title_text,
+                        status_cb=st,
+                        progress_cb=pr,
+                        persist_segments=(idx == 0),
+                    )
+                except Exception as e:
+                    if idx == 0:
+                        raise          # Hauptvideo fehlgeschlagen -> Abbruch
+                    failed.append(f"{FORMAT_LABELS[fmt]}: {e}")
+                    continue
+
+                if idx == 0:
+                    main_result = result
+
+            _nv, _np, _ct, seg_meta, render_info = main_result
+            done_names = [fo.name for (_f, fo) in jobs if fo.exists()]
             app.after(0, play_done_sound)
-            app.after(0, ui_status, f"Fertig: {out_path.name}")
+            if failed:
+                app.after(0, ui_status, "Fertig: " + " + ".join(done_names) + "  —  Fehler bei " + "; ".join(failed))
+            else:
+                app.after(0, ui_status, "Fertig: " + " + ".join(done_names))
             app.after(0, lambda: _after_render(seg_meta, render_info, music_file, out_path))
         except Exception as e:
             app.after(0, ui_status, f"Fehler: {e}")
@@ -1941,15 +2340,15 @@ sec_fmt.grid_propagate(False)
 ctk.CTkLabel(sec_fmt, text="Format", font=ctk.CTkFont(size=13, weight="bold")).pack(
     anchor="w", padx=12, pady=(10, 4)
 )
-rb_fmt_normal = ctk.CTkRadioButton(sec_fmt, text="Normal  16:9", variable=format_var,
-                                    value="normal", command=on_format_change)
-rb_fmt_normal.pack(anchor="w", padx=12, pady=(0, 4))
-rb_fmt_shorts = ctk.CTkRadioButton(sec_fmt, text="Normal  9:16", variable=format_var,
-                                    value="shorts", command=on_format_change)
-rb_fmt_shorts.pack(anchor="w", padx=12, pady=(0, 4))
-rb_fmt_shorts58 = ctk.CTkRadioButton(sec_fmt, text="Shorts  9:16 · 58s", variable=format_var,
-                                      value="shorts58", command=on_format_change)
-rb_fmt_shorts58.pack(anchor="w", padx=12, pady=(0, 10))
+cb_fmt_normal = ctk.CTkCheckBox(sec_fmt, text="Normal  16:9", variable=format_vars["normal"],
+                                command=lambda: on_format_change("normal"))
+cb_fmt_normal.pack(anchor="w", padx=12, pady=(0, 4))
+cb_fmt_shorts = ctk.CTkCheckBox(sec_fmt, text="Normal  9:16", variable=format_vars["shorts"],
+                                command=lambda: on_format_change("shorts"))
+cb_fmt_shorts.pack(anchor="w", padx=12, pady=(0, 4))
+cb_fmt_shorts58 = ctk.CTkCheckBox(sec_fmt, text="Short  9:16 · 58s", variable=format_vars["shorts58"],
+                                  command=lambda: on_format_change("shorts58"))
+cb_fmt_shorts58.pack(anchor="w", padx=12, pady=(0, 10))
 
 # Schnitt
 sec_speed = ctk.CTkFrame(mid, corner_radius=12, width=190)
@@ -2047,7 +2446,7 @@ btn_row.grid_columnconfigure(0, weight=1)
 btn_row.grid_columnconfigure(1, weight=1)
 btn_row.grid_columnconfigure(2, weight=1)
 
-btn_standard = ctk.CTkButton(btn_row, text="Standard (intern)", command=use_standard_clips)
+btn_standard = ctk.CTkButton(btn_row, text="Short per URL (Zwischenablage)", command=on_short_url_click)
 btn_standard.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 btn_external = ctk.CTkButton(btn_row, text="Externe Clips wählen…", command=choose_external_clips_folder)
 btn_external.grid(row=0, column=1, sticky="ew", padx=(0, 6))
@@ -2174,7 +2573,7 @@ def _enter_editor():
 
     ctk.CTkLabel(
         sec_top,
-        text="Ordne die Clips per Drag & Drop neu an und klicke auf Übernehmen",
+        text="Clips per Drag & Drop umsortieren oder mit „✕ Entfernen“ ersetzen – dann Übernehmen",
         font=ctk.CTkFont(size=12),
         text_color=("gray30", "gray75"),
         anchor="w",
@@ -2226,7 +2625,7 @@ def _enter_editor():
 
     ctk.CTkLabel(
         outer,
-        text="Ziehe Clips an die gewünschte Position",
+        text="Ziehen = neue Position · Entfernen = zufälliger Ersatzclip gleicher Länge (Intro/Outro bleiben)",
         font=ctk.CTkFont(size=11),
         text_color=("gray40", "gray65"),
     ).pack(pady=(0, 4))
@@ -2244,7 +2643,7 @@ def _enter_editor():
     status_ed = ctk.CTkTextbox(bottom_ed, height=28, wrap="none",
                                activate_scrollbars=False, font=ctk.CTkFont(size=12))
     status_ed.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
-    status_ed.insert("1.0", "Clips verschieben oder Übernehmen klicken")
+    status_ed.insert("1.0", "Clips verschieben oder entfernen, dann Übernehmen klicken")
     status_ed.configure(state="disabled")
     outer._status_ed = status_ed  # type: ignore[attr-defined]
 
@@ -2265,8 +2664,13 @@ def _enter_editor():
 
 
 def _cancel_editor():
-    """Zurück zum Hauptfenster — Reihenfolge wird zurückgesetzt, Einstellungen bleiben."""
+    """Zurück zum Hauptfenster — nicht übernommene Änderungen (Reihenfolge, ersetzte Clips)
+    werden verworfen, Einstellungen bleiben."""
     global in_editor_mode, _timeline_order, _tline_changed
+    if _reorder_busy or _replace_busy:
+        _editor_status("Bitte kurz warten …")
+        return
+    _restore_replaced_clips()
     in_editor_mode   = False
     _timeline_order  = list(range(len(timeline_seg_meta)))
     _tline_changed   = False
@@ -2274,11 +2678,9 @@ def _cancel_editor():
 
 
 def _cancel_editor_keep_order():
-    """Zurück nach Übernehmen — neue Reihenfolge bleibt erhalten."""
-    global in_editor_mode, _tline_changed
-    in_editor_mode = False
-    _tline_changed = False
-    _rebuild_main_ui()
+    """Zurück nach "Übernehmen". Der übernommene Stand steckt bereits fest in der
+    Segmentliste; nur danach noch Geändertes (nicht übernommen) wird verworfen."""
+    _cancel_editor()
 
 
 def _rebuild_main_ui():
@@ -2352,7 +2754,7 @@ def _rebuild_main_ui():
 
 def _init_mid_section():
     """Baut Format/Schnitt/Pool + Quellen-Sektion auf."""
-    global rb_fmt_normal, rb_fmt_shorts, rb_fmt_shorts58
+    global cb_fmt_normal, cb_fmt_shorts, cb_fmt_shorts58
     global rb_gentle, rb_normal, rb_random, rb_slow, rb_fast
     global opt_pool, sw_intro, sw_outro, sw_vorspann, sw_title
     global sw_pool, sw_external, sw_photos
@@ -2372,12 +2774,12 @@ def _init_mid_section():
     sec_fmt.pack_propagate(False)
     sec_fmt.grid_propagate(False)
     ctk.CTkLabel(sec_fmt, text="Format", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
-    rb_fmt_normal = ctk.CTkRadioButton(sec_fmt, text="Normal  16:9", variable=format_var, value="normal", command=on_format_change)
-    rb_fmt_normal.pack(anchor="w", padx=12, pady=(0, 4))
-    rb_fmt_shorts = ctk.CTkRadioButton(sec_fmt, text="Normal  9:16", variable=format_var, value="shorts", command=on_format_change)
-    rb_fmt_shorts.pack(anchor="w", padx=12, pady=(0, 4))
-    rb_fmt_shorts58 = ctk.CTkRadioButton(sec_fmt, text="Shorts  9:16 · 58s", variable=format_var, value="shorts58", command=on_format_change)
-    rb_fmt_shorts58.pack(anchor="w", padx=12, pady=(0, 10))
+    cb_fmt_normal = ctk.CTkCheckBox(sec_fmt, text="Normal  16:9", variable=format_vars["normal"], command=lambda: on_format_change("normal"))
+    cb_fmt_normal.pack(anchor="w", padx=12, pady=(0, 4))
+    cb_fmt_shorts = ctk.CTkCheckBox(sec_fmt, text="Normal  9:16", variable=format_vars["shorts"], command=lambda: on_format_change("shorts"))
+    cb_fmt_shorts.pack(anchor="w", padx=12, pady=(0, 4))
+    cb_fmt_shorts58 = ctk.CTkCheckBox(sec_fmt, text="Short  9:16 · 58s", variable=format_vars["shorts58"], command=lambda: on_format_change("shorts58"))
+    cb_fmt_shorts58.pack(anchor="w", padx=12, pady=(0, 10))
 
     # Schnitt
     sec_speed = ctk.CTkFrame(mid, corner_radius=12, width=190)
@@ -2445,7 +2847,7 @@ def _init_mid_section():
     btn_row2.grid_columnconfigure(0, weight=1)
     btn_row2.grid_columnconfigure(1, weight=1)
     btn_row2.grid_columnconfigure(2, weight=1)
-    btn_standard = ctk.CTkButton(btn_row2, text="Standard (intern)", command=use_standard_clips)
+    btn_standard = ctk.CTkButton(btn_row2, text="Short per URL (Zwischenablage)", command=on_short_url_click)
     btn_standard.grid(row=0, column=0, sticky="ew", padx=(0, 6))
     BTN_DEFAULT_FG = btn_standard.cget("fg_color")
     btn_external = ctk.CTkButton(btn_row2, text="Externe Clips wählen…", command=choose_external_clips_folder)
@@ -2560,7 +2962,121 @@ def _build_clip_grid(parent, out_path: Path):
             frm.bind("<B1-Motion>",         lambda e: _drag_motion(e))
             frm.bind("<ButtonRelease-1>",   lambda e: _drag_end_motion(e, out_path))
 
+        # Clip entfernen (wird durch einen neuen, gleich langen Clip ersetzt).
+        # Nur für echte Clips/Fotos — Intro, Pre-Intro und Outro bleiben geschützt.
+        if meta.get("src") and not (is_outro or is_vorspann):
+            ctk.CTkButton(
+                frm, text="✕  Entfernen", width=TLINE_THUMB_W, height=22,
+                font=ctk.CTkFont(size=11),
+                fg_color=("#c0392b", "#8B0000"), hover_color=("#e74c3c", "#B22222"),
+                corner_radius=4,
+                command=lambda i=display_pos: _replace_clip(i, out_path),
+            ).pack(padx=3, pady=(2, 5))
+
         _tline_buttons.append(btn)
+
+
+# ---------------- Clip entfernen / ersetzen ----------------
+_replace_busy: bool = False      # ein Ersatz-Clip wird gerade gerendert
+_reorder_busy: bool = False      # "Übernehmen" läuft gerade
+_replace_counter: int = 0
+
+
+def _editor_status(text: str):
+    """Schreibt in die Statuszeile des Editors."""
+    try:
+        sb = outer._status_ed  # type: ignore[attr-defined]
+        sb.configure(state="normal")
+        sb.delete("1.0", "end")
+        sb.insert("1.0", text)
+        sb.configure(state="disabled")
+    except Exception:
+        pass
+
+
+def _replace_clip(display_pos: int, out_path: Path):
+    """Entfernt einen Clip und füllt die Lücke mit einem neuen Clip gleicher Länge."""
+    global _replace_busy, _replace_counter
+
+    if _replace_busy or _reorder_busy:
+        _editor_status("Bitte kurz warten …")
+        return
+    if display_pos < 0 or display_pos >= len(_timeline_order):
+        return
+
+    orig_idx = _timeline_order[display_pos]
+    meta = timeline_seg_meta[orig_idx]
+    if not meta.get("src"):
+        return
+
+    ri = timeline_render_info
+    pool = ri.get("replace_pool") or []
+    if not pool:
+        _editor_status("Keine Ersatz-Clips verfügbar")
+        return
+
+    vf = build_vf_base(ri.get("out_w", 1920), ri.get("out_h", 1080),
+                       "shorts" if ri.get("is_shorts") else "normal")
+    used = {m.get("src") for m in timeline_seg_meta if m.get("src")}
+    old_seg = Path(meta["path"])
+    old_src = meta["src"]
+
+    _replace_counter += 1
+    new_seg = SEGMENTS_DIR / f"seg_r{_replace_counter:04d}.mp4"
+
+    _replace_busy = True
+    _editor_status("Ersetze Clip … (wird neu gerendert)")
+
+    def worker():
+        try:
+            new_meta = build_replacement_segment(old_seg, old_src, used, pool, vf, new_seg)
+            extract_tline_thumbnail(new_meta["path"])
+            app.after(0, lambda: _apply_replacement(orig_idx, new_meta, out_path))
+        except Exception as e:
+            app.after(0, lambda: _replacement_failed(e))
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _apply_replacement(orig_idx: int, new_meta: dict, out_path: Path):
+    global _replace_busy, _tline_changed
+    _replace_busy = False
+    if not in_editor_mode or orig_idx >= len(timeline_seg_meta):
+        try:
+            Path(new_meta["path"]).unlink()
+        except Exception:
+            pass
+        return
+
+    meta = timeline_seg_meta[orig_idx]
+    if "orig" not in meta:       # Ausgangszustand merken, damit "Abbrechen" ihn zurückholen kann
+        meta["orig"] = {k: meta.get(k) for k in ("path", "label", "src", "kind")}
+    meta.update(new_meta)
+
+    _tline_changed = True
+    try:
+        outer._btn_reorder.configure(state="normal")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    try:
+        _build_clip_grid(outer._grid_frame, out_path)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    _editor_status("Clip ersetzt — mit „Übernehmen“ speichern")
+
+
+def _replacement_failed(err: Exception):
+    global _replace_busy
+    _replace_busy = False
+    _editor_status(f"Clip konnte nicht ersetzt werden: {err}")
+
+
+def _restore_replaced_clips():
+    """Macht alle noch nicht übernommenen Clip-Ersetzungen rückgängig."""
+    for m in timeline_seg_meta:
+        orig = m.pop("orig", None)
+        if orig:
+            m.update({k: v for k, v in orig.items() if v is not None})
 
 
 _drag_ghost: Optional[ctk.CTkLabel] = None
@@ -2745,13 +3261,55 @@ def _drag_end_motion(event, out_path: Path):
         pass
 
 
+def _commit_applied_order(applied_order: list[int]):
+    """Schreibt den soeben ins Video übernommenen Stand fest in die Segmentliste.
+    Dadurch zeigt der Editor beim nächsten Öffnen die tatsächliche Reihenfolge des Videos."""
+    global timeline_seg_meta, _timeline_order, _tline_changed
+    current = list(_timeline_order)
+    new_meta = [timeline_seg_meta[i] for i in applied_order]
+    for m in new_meta:
+        m.pop("orig", None)                   # Ersetzungen sind jetzt bestätigt
+    pos = {old_idx: new_pos for new_pos, old_idx in enumerate(applied_order)}
+    timeline_seg_meta = new_meta
+    _timeline_order = [pos[j] for j in current]   # evtl. inzwischen Verschobenes bleibt sichtbar
+    _tline_changed = (current != applied_order)
+
+
+def _finish_reorder_ok(applied_order: list[int]):
+    global _reorder_busy
+    _reorder_busy = False
+    _commit_applied_order(applied_order)
+    try:
+        outer._btn_reorder.configure(state="normal" if _tline_changed else "disabled")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
+def _finish_reorder_fail():
+    global _reorder_busy
+    _reorder_busy = False
+    try:
+        outer._btn_reorder.configure(state="normal")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
 def _do_reorder(audio_path: str, out_path: Path):
+    global _reorder_busy
+    if _replace_busy:
+        _editor_status("Bitte warten — Clip wird gerade ersetzt …")
+        return
+    if _reorder_busy:
+        return
+    _reorder_busy = True
+
     try:
         outer._btn_reorder.configure(state="disabled")  # type: ignore[attr-defined]
     except Exception:
         pass
 
     ri = timeline_render_info
+    applied_order = list(_timeline_order)   # eingefrorener Stand, der jetzt geschrieben wird
 
     def _set_status_ed(text: str):
         try:
@@ -2775,7 +3333,7 @@ def _do_reorder(audio_path: str, out_path: Path):
 
     def worker():
         try:
-            ordered_segs = [Path(timeline_seg_meta[i]["path"]) for i in _timeline_order]
+            ordered_segs = [Path(timeline_seg_meta[i]["path"]) for i in applied_order]
             missing = [s for s in ordered_segs if not s.exists()]
             if missing:
                 raise RuntimeError(f"Segment fehlt: {missing[0].name}")
@@ -2805,17 +3363,18 @@ def _do_reorder(audio_path: str, out_path: Path):
 
             if shorts_limited:
                 fade_start, fade_d = compute_fade(music_dur)
+                _ms = float(ri.get("music_start", 0.0))
                 a_chain = (
-                    f"atrim=0:{music_dur:.4f},"
-                    f"afade=t=out:st={fade_start:.4f}:d={fade_d:.4f},"
-                    "asetpts=PTS-STARTPTS"
+                    f"atrim={_ms:.4f}:{_ms + music_dur:.4f},asetpts=PTS-STARTPTS,"
+                    f"afade=t=in:st=0:d={SHORTS_FADE_IN_SEC:.2f},"
+                    f"afade=t=out:st={fade_start:.4f}:d={fade_d:.4f}"
                 )
             else:
                 a_chain = f"atrim=0:{music_dur:.4f},asetpts=PTS-STARTPTS"
 
             # Vorspann-Audio nur wenn das Vorspann-Segment das ERSTE ist (nicht verschoben)
             # UND die Original-Vorspann-Quelle noch existiert und Ton hat.
-            first_seg = timeline_seg_meta[_timeline_order[0]]
+            first_seg = timeline_seg_meta[applied_order[0]]
             first_label = first_seg.get("label", "")
             vorspann_audio_path = None
             music_delay_ms = 0
@@ -2831,7 +3390,7 @@ def _do_reorder(audio_path: str, out_path: Path):
             # UND die Original-Outro-Quelle noch existiert und Ton hat.
             # Delay = Pre-Intro-Länge + Musiklänge, damit der Zeitpunkt auch mit aktivem
             # Pre-Intro stimmt — nicht nur music_dur.
-            last_seg = timeline_seg_meta[_timeline_order[-1]]
+            last_seg = timeline_seg_meta[applied_order[-1]]
             last_label = last_seg.get("label", "")
             outro_audio_path = None
             outro_delay_ms = 0
@@ -2916,7 +3475,7 @@ def _do_reorder(audio_path: str, out_path: Path):
             app.after(0, _set_progress_ed, 1.0)
             app.after(0, play_done_sound)
             app.after(0, _set_status_ed, f"Fertig: {out_path.name}")
-            app.after(0, lambda: outer._btn_reorder.configure(state="normal"))  # type: ignore[attr-defined]
+            app.after(0, lambda: _finish_reorder_ok(applied_order))
             # Nach Übernehmen: Abbrechen-Button zu "Zurück" ändern (kein Reset der Reihenfolge mehr)
             app.after(0, lambda: outer._btn_abbrechen.configure(  # type: ignore[attr-defined]
                 text="✕  Zurück",
@@ -2925,7 +3484,7 @@ def _do_reorder(audio_path: str, out_path: Path):
         except Exception as e:
             app.after(0, _set_progress_ed, 0.0)
             app.after(0, _set_status_ed, f"Fehler: {e}")
-            app.after(0, lambda: outer._btn_reorder.configure(state="normal"))  # type: ignore[attr-defined]
+            app.after(0, _finish_reorder_fail)
 
     threading.Thread(target=worker, daemon=True).start()
 

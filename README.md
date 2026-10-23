@@ -14,14 +14,19 @@ Fertige Windows-EXE (portable, kein Python nötig):
 ## Funktionen
 
 - **Beat-synchrones Schneiden** – Musik wird analysiert, Schnitte automatisch auf den Beat gelegt
-- **Drei Formate** – 16:9, 9:16, oder kurzes Shorts-Format
+- **Mehrere Formate gleichzeitig** – 16:9, 9:16 und 58-Sekunden-Short per Mehrfachauswahl (Standard: 16:9 + Short)
 - **Fünf Schnittgeschwindigkeiten** – von sanft bis energetisch, oder zufällig gemischt
 - **Interner Clip-Pool** – eigene Clips nach Stimmung sortiert (traurig, neutral, glücklich, Animation)
 - **Externe Clips & Fotos** – zusätzliches oder alternatives Bildmaterial einbinden
 - **Pre-Intro, Intro, Outro** – optionale Bausteine, Pre-Intro und Outro mit eigenem Ton
 - **Titel-Overlay** – automatisch aus dem Musikdateinamen generiert
-- **Clip-Editor** – Reihenfolge der Clips nach dem Rendern per Drag & Drop anpassen, ohne komplett neu zu rendern
+- **Short per URL** – YouTube-Link aus der Zwischenablage → 45-s-Short (9:16) mit stärkstem Abschnitt
+- **Clip-Editor** – Clips nach dem Rendern umsortieren oder durch Ersatzclips gleicher Länge austauschen, ohne komplett neu zu rendern
 - **YouTube-Shortcut** – Upload-Seite direkt aus dem Programm öffnen
+
+## Screenshots
+
+*(Screenshots hier einfügen, z. B. Hauptfenster und Clip-Editor)*
 
 ## Installation & Nutzung
 
@@ -35,13 +40,6 @@ Fertige Windows-EXE (portable, kein Python nötig):
 Ausführliche Anleitung: `MVG_Bedienungsanleitung.pdf` (liegt neben der EXE, oder direkt im Programm über den `?`-Button erreichbar)
 
 ### Für Entwickler
-
-## Zusätzlich benötigte Datein
-
-- **icon.ico
-- **splash.png
-- **Sound/done.wav
-- **ffmpeg/
 
 ```bash
 git clone https://github.com/<user>/<repo>.git
@@ -63,7 +61,9 @@ python gui_step3.py
 build_exe.bat
 ```
 
-Voraussetzung: Python 3.12, PyInstaller (in `requirements.txt` enthalten), sowie `ffmpeg/`, `Sound/`, `splash.png` und `icon.ico` im Projektordner. Die fertige EXE liegt danach in `dist/`.
+> **Nicht im Repo enthalten** (müssen zum Selbstbauen ergänzt werden): `ffmpeg/` (ffmpeg.exe, ffprobe.exe), `Sound/done.wav`, `splash.png` und `icon.ico`.
+
+Voraussetzung: Python 3.12, PyInstaller (in `requirements.txt` enthalten), sowie die oben genannten Dateien im Projektordner. Die fertige EXE liegt danach in `dist/`.
 
 ## Ordnerstruktur
 
@@ -85,6 +85,4 @@ Python 3.12 · CustomTkinter · librosa · FFmpeg · PyInstaller
 
 ## Lizenz
 
-MIT – siehe [LICENSE](LICENSE).
-
-FFmpeg ist nicht Teil dieses Quellcode-Repos (siehe `.gitignore`) und muss für die lokale Entwicklung separat bezogen werden. Die fertige EXE in den [Releases](../../releases) enthält FFmpeg eingebettet – die Weitergabe der kompilierten FFmpeg-Binärdateien zusammen mit dieser Anwendung ist im Rahmen der [FFmpeg-Lizenz](https://ffmpeg.org/legal.html) (LGPL/GPL, je nach Build) zulässig.
+MIT – siehe [LICENSE](LICENSE). FFmpeg unterliegt eigenen Lizenzbedingungen und ist nicht Teil dieses Repos.

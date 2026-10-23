@@ -2,6 +2,7 @@ numpy
 librosa
 customtkinter
 Pillow
+yt-dlp[default]
 
 # nur für den EXE-Build benötigt (siehe build_exe.bat)
 pyinstaller
