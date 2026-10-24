@@ -1,7 +1,7 @@
 @echo off
 echo.
 echo  ============================================
-echo   Musik Video Generator v2.8 - EXE Build
+echo   Musik Video Generator v2.9 - EXE Build
 echo  ============================================
 echo.
 
@@ -25,7 +25,7 @@ echo.
 if %ERRORLEVEL% == 0 (
     echo  Build erfolgreich! EXE liegt in: dist\MVG.exe
     echo.
-    echo  WICHTIG: MVG_Bedienungsanleitung.pdf manuell in den dist-Ordner
+    echo  WICHTIG: alle drei PDF-Anleitungen (MVG_Bedienungsanleitung.pdf, MVG_Manual_EN.pdf, MVG_Manual_ES.pdf) manuell in den dist-Ordner
     echo  kopieren, damit sie neben der EXE liegt und ohne Programmstart
     echo  geoeffnet werden kann.
 ) else (

@@ -20,6 +20,7 @@ Fertige Windows-EXE (portable, kein Python nötig):
 - **Externe Clips & Fotos** – zusätzliches oder alternatives Bildmaterial einbinden
 - **Pre-Intro, Intro, Outro** – optionale Bausteine, Pre-Intro und Outro mit eigenem Ton
 - **Titel-Overlay** – automatisch aus dem Musikdateinamen generiert
+- **Drei Sprachen & Klick-Hilfe** – Deutsch, English, Español; „?“ erklärt jeden Bereich per Klick
 - **Short per URL** – YouTube-Link aus der Zwischenablage → 45-s-Short (9:16) mit stärkstem Abschnitt
 - **Clip-Editor** – Clips nach dem Rendern umsortieren oder durch Ersatzclips gleicher Länge austauschen, ohne komplett neu zu rendern
 - **YouTube-Shortcut** – Upload-Seite direkt aus dem Programm öffnen
@@ -37,7 +38,7 @@ Fertige Windows-EXE (portable, kein Python nötig):
 3. Eigene Videoclips in `clips/traurig/`, `clips/neutral/`, `clips/gluecklich/` und `clips/animations/` legen (das Programm wird ohne Clips ausgeliefert)
 4. Musik laden, Optionen wählen, Rendern
 
-Ausführliche Anleitung: `MVG_Bedienungsanleitung.pdf` (liegt neben der EXE, oder direkt im Programm über den `?`-Button erreichbar)
+Ausführliche Anleitung: `MVG_Bedienungsanleitung.pdf` (Deutsch), `MVG_Manual_EN.pdf`, `MVG_Manual_ES.pdf` (liegt neben der EXE, oder direkt im Programm über den `?`-Button erreichbar)
 
 ### Für Entwickler
 

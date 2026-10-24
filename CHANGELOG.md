@@ -1,5 +1,15 @@
 # Changelog — Musik Video Generator
 
+## v2.9
+
+- **Mehrsprachig: Deutsch, English, Español.** Beim ersten Start wird die Sprache gewählt; änderbar über „?“ → Language (danach Neustart). Die Auswahl steht in `mvg_settings.json` neben dem Programm.
+- **Klick-Hilfe:** Das „?“ öffnet ein Menü (Klick-Hilfe, Kurzanleitung, PDF, Sprache). In der Klick-Hilfe klickt man auf einen beliebigen Knopf oder Bereich und bekommt eine ausführliche Erklärung (Hauptfenster und Clip-Editor); danach beendet sich der Modus von selbst.
+- **Kurzanleitung** aufgeräumt und ohne Buttons; kein Assistent (Klick-Hilfe ersetzt ihn).
+- **Klick-Hilfe:** Das „?“ öffnet ein Menü (Klick-Hilfe, Assistent, Kurzanleitung, PDF, Sprache). In der Klick-Hilfe klickt man auf einen beliebigen Knopf, Schalter oder Bereich – im Hauptfenster und im Clip-Editor – und bekommt eine ausführliche Erklärung (36 Themen, in allen drei Sprachen). Eine blaue Leiste zeigt beim Überfahren den Namen des Bereichs; Beenden mit Esc oder Button.
+- **Bedienungsanleitung als PDF in drei Sprachen** (`MVG_Bedienungsanleitung.pdf`, `MVG_Manual_EN.pdf`, `MVG_Manual_ES.pdf`); der PDF-Button öffnet die PDF der gewählten Sprache.
+- **Fehlerbehebung:** Startfehler `KeyError: 'Sad'` bei englischer/spanischer Oberfläche behoben (Stimmungsnamen wurden fälschlich übersetzt).
+- **Fehlerbehebung:** Meldung beim Fehlschlag von „Clip entfernen“ im Editor konnte einen Programmfehler auslösen (Variable nicht mehr verfügbar) – behoben.
+
 ## v2.8
 
 - **Weiches Ein- und Ausblenden beim 58-s-Short:** Da der Short ein Ausschnitt aus der Songmitte ist, wird Bild und Ton jetzt am Anfang kurz eingeblendet (0,6 s) und am Ende ausgeblendet.

@@ -1,4 +1,4 @@
-# Musik Video Generator v2.8
+# Musik Video Generator v2.9
 
 from __future__ import annotations
 
@@ -100,6 +100,7 @@ import numpy as np
 import librosa
 
 import customtkinter as ctk
+import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image
 
@@ -129,6 +130,355 @@ def app_dir() -> Path:
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
 
+
+# --------------------- Sprache / Übersetzung ---------------------
+import json as _json
+
+SETTINGS_FILE = app_dir() / "mvg_settings.json"
+LANGS = {"de": "Deutsch", "en": "English", "es": "Español"}
+
+
+def load_settings() -> dict:
+    try:
+        return _json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_settings(data: dict) -> None:
+    try:
+        cur = load_settings()
+        cur.update(data)
+        SETTINGS_FILE.write_text(_json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+_SETTINGS = load_settings()
+LANG = _SETTINGS.get("lang", "")
+if LANG not in LANGS:
+    LANG = ""          # noch nicht gewählt -> Auswahl beim ersten Start (de bis dahin)
+
+
+def tr(text: str) -> str:
+    """Übersetzt einen deutschen Programmtext in die gewählte Sprache (Fallback: Deutsch)."""
+    if LANG in ("", "de"):
+        return text
+    return TRANSLATIONS.get(LANG, {}).get(text, text)
+
+
+TRANSLATIONS: dict = {"en": {}, "es": {}}   # wird weiter unten gefüllt
+
+
+TRANSLATIONS = {
+ "en": {
+  "  —  Fehler bei ": "  —  errors in ",
+  "(keine Musik gewählt)": "(no music selected)",
+  "Abbrechen": "Cancel",
+  "Alle": "All",
+  "Analysiere Musik…": "Analyzing music…",
+  "Animation": "Animation",
+  "Anzahl:": "Count:",
+  "Automatisch": "Automatic",
+  "Beenden": "Quit",
+  "Bitte ein einzelnes, abgeschlossenes Video verwenden.": "Please use a single, finished video.",
+  "Bitte warten — Clip wird gerade ersetzt …": "Please wait — a clip is being replaced …",
+  "Cache geleert ({n} Dateien)": "Cache cleared ({n} files)",
+  "Clip ersetzt — mit „Übernehmen“ speichern": "Clip replaced — save with “Apply”",
+  "Clip konnte nicht ersetzt werden: ": "Clip could not be replaced: ",
+  "Clips (intern): {path}": "Clips (internal): {path}",
+  "Clips auswählen  ({moods})": "Select clips  ({moods})",
+  "Clips per Drag & Drop umsortieren oder mit „✕ Entfernen“ ersetzen – dann Übernehmen": "Reorder clips by drag & drop or replace them with “✕ Remove” – then Apply",
+  "Clips verschieben oder entfernen, dann Übernehmen klicken": "Move or remove clips, then click Apply",
+  "Clips: {path}": "Clips: {path}",
+  "Clips: {v} | Fotos: {p}": "Clips: {v} | Photos: {p}",
+  "Das Video muss mindestens {n} Sekunden lang sein.": "The video must be at least {n} seconds long.",
+  "Die heruntergeladene Videodatei wurde nicht gefunden.": "The downloaded video file was not found.",
+  "Du befindest dich im Editor. Wirklich beenden?": "You are in the editor. Really quit?",
+  "Ersetze Clip … (wird neu gerendert)": "Replacing clip … (re-rendering)",
+  "Externe Clips": "External clips",
+  "Externe Clips wählen…": "Choose external clips…",
+  "Externe Fotos": "External photos",
+  "Externe Fotos wählen…": "Choose external photos…",
+  "Externer Clip-Ordner": "External clip folder",
+  "Externer Clip-Ordner gesetzt": "External clip folder set",
+  "Fehler: ": "Error: ",
+  "Fertig: ": "Done: ",
+  "Format": "Format",
+  "Formate: ": "Formats: ",
+  "Foto-Ordner": "Photo folder",
+  "Foto-Ordner gesetzt": "Photo folder set",
+  "Fotos: {path}": "Photos: {path}",
+  "Glücklich": "Happy",
+  "Hänge Outro an…": "Appending outro…",
+  "In der Zwischenablage ist kein gültiger YouTube-Link.": "The clipboard does not contain a valid YouTube link.",
+  "Interner Clip-Pool": "Internal clip pool",
+  "Interner Pool": "Internal pool",
+  "Intro": "Intro",
+  "Keine": "None",
+  "Keine Ersatz-Clips verfügbar": "No replacement clips available",
+  "Keine Medien gefunden. (Extern/Intern prüfen)": "No media found. (Check external/internal)",
+  "Keine Medien zum Auswählen vorhanden.": "No media available to choose from.",
+  "Keine Quelle aktiv": "No source active",
+  "Keine alternativen Clips verfügbar.": "No alternative clips available.",
+  "Keine internen Clips gefunden": "No internal clips found",
+  "Klebe Segmente…": "Joining segments…",
+  "Kurzanleitung": "Quick guide",
+  "Langsam": "Slow",
+  "Manuelle Auswahl": "Manual selection",
+  "Manuelle Auswahl: alle Clips": "Manual selection: all clips",
+  "Manuelle Auswahl: {n} Clips": "Manual selection: {n} clips",
+  "Manuelle Clip-Auswahl  —  Stimmung: {moods}": "Manual clip selection  —  Mood: {moods}",
+  "Mindestens ein Format muss aktiv sein": "At least one format must be active",
+  "Musik Video Generator": "Music Video Generator",
+  "Musik Video Generator  v2.9": "Music Video Generator  v2.9",
+  "Musik auswählen": "Choose music",
+  "Musik wird analysiert …": "Analyzing music …",
+  "Musik wählen": "Choose music",
+  "Muxe Audio…": "Mixing audio…",
+  "Neutral": "Neutral",
+  "Normal": "Normal",
+  "Normal  16:9": "Normal  16:9",
+  "Normal  9:16": "Normal  9:16",
+  "Normalisiere: ": "Normalizing: ",
+  "OK": "OK",
+  "Output-Ordner": "Output folder",
+  "Output: ": "Output: ",
+  "Output: (Musik auswählen)": "Output: (choose music)",
+  "Outro": "Outro",
+  "PDF-Anleitung nicht neben dem Programm gefunden": "PDF manual not found next to the program",
+  "PDF-Anleitung öffnen": "Open PDF manual",
+  "Pool: AUS": "Pool: OFF",
+  "Pool: alle / 10 / 20 / 30": "Pool: all / 10 / 20 / 30",
+  "Pool: keine Clips in der gewählten Stimmung": "Pool: no clips in the selected mood",
+  "Pre-Intro": "Pre-intro",
+  "Projekt zurücksetzen?": "Reset project?",
+  "Projekt zurücksetzen?\n\nCache enthält {n} Datei(en) ({mb:.1f} MB).\nCache ebenfalls leeren?": "Reset project?\n\nThe cache contains {n} file(s) ({mb:.1f} MB).\nClear the cache as well?",
+  "Projekt-Reset": "Project reset",
+  "Quelle: (nichts gewählt)": "Source: (nothing selected)",
+  "Quelle: MIX (Extern bevorzugt)": "Source: MIX (external preferred)",
+  "Quelle: NUR EXTERN": "Source: EXTERNAL ONLY",
+  "Quelle: NUR INTERN": "Source: INTERNAL ONLY",
+  "Quellen & Optionen": "Sources & options",
+  "Random": "Random",
+  "Rendere Intro…": "Rendering intro…",
+  "Rendere Pre-Intro…": "Rendering pre-intro…",
+  "Rendere Segmente…": "Rendering segments…",
+  "Reset": "Reset",
+  "Reset nicht möglich während Render läuft": "Reset not possible while rendering",
+  "Sanft": "Gentle",
+  "Schließen": "Close",
+  "Schnell": "Fast",
+  "Schnitt": "Cutting",
+  "Short  9:16 · 58s": "Short  9:16 · 58s",
+  "Short fertig: {name}  (Ordner output/Shorts)": "Short ready: {name}  (folder output/Shorts)",
+  "Short per URL": "Short from URL",
+  "Short per URL (Zwischenablage)": "Short from URL (clipboard)",
+  "Short per URL fehlgeschlagen": "Short from URL failed",
+  "Short wird erstellt …": "Creating short …",
+  "Short: ab {t}": "Short: from {t}",
+  "Starte…": "Starting…",
+  "Stimmung: ": "Mood: ",
+  "Stimmung: alle": "Mood: all",
+  "Suche stärksten Abschnitt für den Short…": "Finding the strongest section for the short…",
+  "Titel": "Title",
+  "Traurig": "Sad",
+  "Video wird geladen …": "Downloading video …",
+  "Video wird geprüft …": "Checking video …",
+  "Wähle deine Stimmung": "Choose your mood",
+  "YouTube": "YouTube",
+  "YouTube-Werkzeug wird geprüft …": "Checking YouTube tool …",
+  "Ziehen = neue Position · Entfernen = zufälliger Ersatzclip gleicher Länge (Intro/Outro bleiben)": "Drag = new position · Remove = random replacement clip of the same length (intro/outro stay)",
+  "Zwischenablage leer – bitte zuerst einen YouTube-Link kopieren": "Clipboard empty – please copy a YouTube link first",
+  "bereit": "ready",
+  "bitte Musik auswählen": "please choose music",
+  "kein Video vorhanden": "no video available",
+  "keine externen Clips gefunden": "no external clips found",
+  "keine externen Fotos gefunden": "no external photos found",
+  "yt-dlp ist nicht installiert (pip install yt-dlp).": "yt-dlp is not installed (pip install yt-dlp).",
+  "{n} / {total} ausgewählt": "{n} / {total} selected",
+  "⏳  Vorschaubilder werden geladen…": "⏳  Loading thumbnails…",
+  "▶  Render": "▶  Render",
+  "▶  Video anschauen": "▶  Watch video",
+  "✏  Clips verschieben": "✏  Edit clips",
+  "✔  Übernehmen": "✔  Apply",
+  "✕  Abbrechen": "✕  Cancel",
+  "✕  Entfernen": "✕  Remove",
+  "✕  Zurück": "✕  Back",
+  "🔒 Outro": "🔒 Outro",
+  "🔒 Pre-Intro": "🔒 Pre-intro",
+ },
+ "es": {
+  "  —  Fehler bei ": "  —  errores en ",
+  "(keine Musik gewählt)": "(ninguna música seleccionada)",
+  "Abbrechen": "Cancelar",
+  "Alle": "Todos",
+  "Analysiere Musik…": "Analizando la música…",
+  "Animation": "Animación",
+  "Anzahl:": "Cantidad:",
+  "Automatisch": "Automático",
+  "Beenden": "Salir",
+  "Bitte ein einzelnes, abgeschlossenes Video verwenden.": "Usa un solo vídeo ya terminado.",
+  "Bitte warten — Clip wird gerade ersetzt …": "Espera — se está reemplazando un clip …",
+  "Cache geleert ({n} Dateien)": "Caché vaciada ({n} archivos)",
+  "Clip ersetzt — mit „Übernehmen“ speichern": "Clip reemplazado — guarda con «Aplicar»",
+  "Clip konnte nicht ersetzt werden: ": "No se pudo reemplazar el clip: ",
+  "Clips (intern): {path}": "Clips (internos): {path}",
+  "Clips auswählen  ({moods})": "Seleccionar clips  ({moods})",
+  "Clips per Drag & Drop umsortieren oder mit „✕ Entfernen“ ersetzen – dann Übernehmen": "Reordena los clips arrastrando o reemplázalos con «✕ Quitar» – luego Aplicar",
+  "Clips verschieben oder entfernen, dann Übernehmen klicken": "Mueve o quita clips y luego pulsa Aplicar",
+  "Clips: {path}": "Clips: {path}",
+  "Clips: {v} | Fotos: {p}": "Clips: {v} | Fotos: {p}",
+  "Das Video muss mindestens {n} Sekunden lang sein.": "El vídeo debe durar al menos {n} segundos.",
+  "Die heruntergeladene Videodatei wurde nicht gefunden.": "No se encontró el archivo de vídeo descargado.",
+  "Du befindest dich im Editor. Wirklich beenden?": "Estás en el editor. ¿Salir de verdad?",
+  "Ersetze Clip … (wird neu gerendert)": "Reemplazando clip … (renderizando de nuevo)",
+  "Externe Clips": "Clips externos",
+  "Externe Clips wählen…": "Elegir clips externos…",
+  "Externe Fotos": "Fotos externas",
+  "Externe Fotos wählen…": "Elegir fotos externas…",
+  "Externer Clip-Ordner": "Carpeta de clips externos",
+  "Externer Clip-Ordner gesetzt": "Carpeta de clips externos definida",
+  "Fehler: ": "Error: ",
+  "Fertig: ": "Listo: ",
+  "Format": "Formato",
+  "Formate: ": "Formatos: ",
+  "Foto-Ordner": "Carpeta de fotos",
+  "Foto-Ordner gesetzt": "Carpeta de fotos definida",
+  "Fotos: {path}": "Fotos: {path}",
+  "Glücklich": "Alegre",
+  "Hänge Outro an…": "Añadiendo el outro…",
+  "In der Zwischenablage ist kein gültiger YouTube-Link.": "El portapapeles no contiene un enlace de YouTube válido.",
+  "Interner Clip-Pool": "Grupo de clips interno",
+  "Interner Pool": "Grupo interno",
+  "Intro": "Intro",
+  "Keine": "Ninguno",
+  "Keine Ersatz-Clips verfügbar": "No hay clips de reemplazo",
+  "Keine Medien gefunden. (Extern/Intern prüfen)": "No se encontró material. (Revisa externo/interno)",
+  "Keine Medien zum Auswählen vorhanden.": "No hay material para elegir.",
+  "Keine Quelle aktiv": "Ninguna fuente activa",
+  "Keine alternativen Clips verfügbar.": "No hay clips alternativos.",
+  "Keine internen Clips gefunden": "No se encontraron clips internos",
+  "Klebe Segmente…": "Uniendo segmentos…",
+  "Kurzanleitung": "Guía rápida",
+  "Langsam": "Lento",
+  "Manuelle Auswahl": "Selección manual",
+  "Manuelle Auswahl: alle Clips": "Selección manual: todos los clips",
+  "Manuelle Auswahl: {n} Clips": "Selección manual: {n} clips",
+  "Manuelle Clip-Auswahl  —  Stimmung: {moods}": "Selección manual de clips  —  Ánimo: {moods}",
+  "Mindestens ein Format muss aktiv sein": "Debe haber al menos un formato activo",
+  "Musik Video Generator": "Generador de vídeos musicales",
+  "Musik Video Generator  v2.9": "Generador de vídeos musicales  v2.9",
+  "Musik auswählen": "Elegir música",
+  "Musik wird analysiert …": "Analizando la música …",
+  "Musik wählen": "Elegir música",
+  "Muxe Audio…": "Mezclando el audio…",
+  "Neutral": "Neutral",
+  "Normal": "Normal",
+  "Normal  16:9": "Normal  16:9",
+  "Normal  9:16": "Normal  9:16",
+  "Normalisiere: ": "Normalizando: ",
+  "OK": "Aceptar",
+  "Output-Ordner": "Carpeta de salida",
+  "Output: ": "Salida: ",
+  "Output: (Musik auswählen)": "Salida: (elige música)",
+  "Outro": "Outro",
+  "PDF-Anleitung nicht neben dem Programm gefunden": "No se encontró el manual PDF junto al programa",
+  "PDF-Anleitung öffnen": "Abrir manual PDF",
+  "Pool: AUS": "Grupo: NO",
+  "Pool: alle / 10 / 20 / 30": "Grupo: todos / 10 / 20 / 30",
+  "Pool: keine Clips in der gewählten Stimmung": "Grupo: no hay clips en el ánimo elegido",
+  "Pre-Intro": "Pre-intro",
+  "Projekt zurücksetzen?": "¿Restablecer el proyecto?",
+  "Projekt zurücksetzen?\n\nCache enthält {n} Datei(en) ({mb:.1f} MB).\nCache ebenfalls leeren?": "¿Restablecer el proyecto?\n\nLa caché contiene {n} archivo(s) ({mb:.1f} MB).\n¿Vaciar también la caché?",
+  "Projekt-Reset": "Restablecer proyecto",
+  "Quelle: (nichts gewählt)": "Fuente: (nada seleccionado)",
+  "Quelle: MIX (Extern bevorzugt)": "Fuente: MIXTA (prioridad externa)",
+  "Quelle: NUR EXTERN": "Fuente: SOLO EXTERNA",
+  "Quelle: NUR INTERN": "Fuente: SOLO INTERNA",
+  "Quellen & Optionen": "Fuentes y opciones",
+  "Random": "Aleatorio",
+  "Rendere Intro…": "Renderizando el intro…",
+  "Rendere Pre-Intro…": "Renderizando el pre-intro…",
+  "Rendere Segmente…": "Renderizando segmentos…",
+  "Reset": "Reiniciar",
+  "Reset nicht möglich während Render läuft": "No se puede reiniciar durante el renderizado",
+  "Sanft": "Suave",
+  "Schließen": "Cerrar",
+  "Schnell": "Rápido",
+  "Schnitt": "Corte",
+  "Short  9:16 · 58s": "Short  9:16 · 58 s",
+  "Short fertig: {name}  (Ordner output/Shorts)": "Short listo: {name}  (carpeta output/Shorts)",
+  "Short per URL": "Short desde URL",
+  "Short per URL (Zwischenablage)": "Short desde URL (portapapeles)",
+  "Short per URL fehlgeschlagen": "Falló el short desde URL",
+  "Short wird erstellt …": "Creando el short …",
+  "Short: ab {t}": "Short: desde {t}",
+  "Starte…": "Iniciando…",
+  "Stimmung: ": "Ánimo: ",
+  "Stimmung: alle": "Ánimo: todos",
+  "Suche stärksten Abschnitt für den Short…": "Buscando la sección más fuerte para el short…",
+  "Titel": "Título",
+  "Traurig": "Triste",
+  "Video wird geladen …": "Descargando el vídeo …",
+  "Video wird geprüft …": "Comprobando el vídeo …",
+  "Wähle deine Stimmung": "Elige tu ánimo",
+  "YouTube": "YouTube",
+  "YouTube-Werkzeug wird geprüft …": "Comprobando la herramienta de YouTube …",
+  "Ziehen = neue Position · Entfernen = zufälliger Ersatzclip gleicher Länge (Intro/Outro bleiben)": "Arrastrar = nueva posición · Quitar = clip de reemplazo aleatorio de la misma duración (intro/outro se mantienen)",
+  "Zwischenablage leer – bitte zuerst einen YouTube-Link kopieren": "Portapapeles vacío – copia primero un enlace de YouTube",
+  "bereit": "listo",
+  "bitte Musik auswählen": "elige primero una música",
+  "kein Video vorhanden": "no hay vídeo",
+  "keine externen Clips gefunden": "no se encontraron clips externos",
+  "keine externen Fotos gefunden": "no se encontraron fotos externas",
+  "yt-dlp ist nicht installiert (pip install yt-dlp).": "yt-dlp no está instalado (pip install yt-dlp).",
+  "{n} / {total} ausgewählt": "{n} / {total} seleccionados",
+  "⏳  Vorschaubilder werden geladen…": "⏳  Cargando miniaturas…",
+  "▶  Render": "▶  Renderizar",
+  "▶  Video anschauen": "▶  Ver vídeo",
+  "✏  Clips verschieben": "✏  Editar clips",
+  "✔  Übernehmen": "✔  Aplicar",
+  "✕  Abbrechen": "✕  Cancelar",
+  "✕  Entfernen": "✕  Quitar",
+  "✕  Zurück": "✕  Atrás",
+  "🔒 Outro": "🔒 Outro",
+  "🔒 Pre-Intro": "🔒 Pre-intro",
+ },
+}
+
+HELP_SECTIONS = {
+ "de": [
+  ["1. Vorbereiten", "Die Clip-Ordner mit eigenen Videos füllen – das Programm wird ohne Clips ausgeliefert."],
+  ["2. Musik & Format", "Musikdatei wählen, dann Format(e) und Schnitt. Standard: 16:9-Video plus 58-s-Short."],
+  ["3. Clip-Quelle", "Interner Pool mit Stimmung, eigene Clips/Fotos oder beides gemischt."],
+  ["4. Extras", "Pre-Intro, Intro, Outro und Titel sind optional und standardmäßig aus."],
+  ["5. Rendern", "Auf „Render“ klicken. Ein Klang meldet das Ende, das Video liegt in output/."],
+  ["6. Nachbearbeiten", "„Clips verschieben“: Clips umsortieren oder mit „✕ Entfernen“ ersetzen."],
+  ["7. Short per URL", "YouTube-Link kopieren, „Short per URL“ klicken – 45-s-Short in output/Shorts."],
+  ["8. Hilfe", "Über das „?“: Klick-Hilfe (Bereich anklicken, Erklärung lesen), PDF, Sprache."]
+ ],
+ "en": [
+  ["1. Prepare", "Fill the clip folders with your own videos – the program ships without clips."],
+  ["2. Music & format", "Choose a music file, then format(s) and cutting. Default: 16:9 video plus 58 s short."],
+  ["3. Clip source", "Internal pool with mood, your own clips/photos, or both mixed."],
+  ["4. Extras", "Pre-intro, intro, outro and title are optional and off by default."],
+  ["5. Render", "Click “Render”. A sound signals the end, the video is in output/."],
+  ["6. Refine", "“Edit clips”: reorder clips or replace them with “✕ Remove”."],
+  ["7. Short from URL", "Copy a YouTube link, click “Short from URL” – 45 s short in output/Shorts."],
+  ["8. Help", "Via “?”: click help (click an area, read the explanation), PDF, language."]
+ ],
+ "es": [
+  ["1. Preparar", "Llena las carpetas de clips con tus vídeos – el programa se entrega sin clips."],
+  ["2. Música y formato", "Elige un archivo de música, luego formato(s) y corte. Por defecto: vídeo 16:9 y short de 58 s."],
+  ["3. Fuente de clips", "Grupo interno con ánimo, tus clips/fotos, o ambos mezclados."],
+  ["4. Extras", "Pre-intro, intro, outro y título son opcionales y están apagados por defecto."],
+  ["5. Renderizar", "Pulsa «Renderizar». Un sonido avisa del final, el vídeo está en output/."],
+  ["6. Retocar", "«Editar clips»: reordena clips o reemplázalos con «✕ Quitar»."],
+  ["7. Short desde URL", "Copia un enlace de YouTube y pulsa «Short desde URL» – short de 45 s en output/Shorts."],
+  ["8. Ayuda", "Con «?»: ayuda con clic (haz clic en una zona y lee la explicación), PDF, idioma."]
+ ]
+}
 
 # --------------------- Done Sound ---------------------
 try:
@@ -224,7 +574,7 @@ CUT_SECONDS_NORMAL = 1.70
 CUT_SECONDS_FAST   = 0.95
 
 POOL_CHOICES = [10, 20, 30]
-POOL_LABELS = ["Automatisch"] + [f"{x} Clips" for x in POOL_CHOICES]
+POOL_LABELS = [tr("Automatisch")] + [f"{x} Clips" for x in POOL_CHOICES]
 
 VIDEO_OVERHANG_SEC = 0.08
 
@@ -434,7 +784,7 @@ def normalize_to_cache_video_only(original: Path, status_cb: Optional[Callable[[
         return out
 
     if status_cb:
-        status_cb(f"Normalisiere: {original.name}")
+        status_cb(tr("Normalisiere: ") + original.name)
 
     vf = f"setpts=PTS-STARTPTS,fps={FPS},setsar=1"
 
@@ -486,7 +836,7 @@ def compute_fade(music_dur: float) -> Tuple[float, float]:
 
 def pick_no_repeat(items: list[Path], last: Optional[Path]) -> Path:
     if not items:
-        raise RuntimeError("Keine Medien zum Auswählen vorhanden.")
+        raise RuntimeError(tr("Keine Medien zum Auswählen vorhanden."))
     if len(items) == 1:
         return items[0]
     x = random.choice(items)
@@ -555,88 +905,40 @@ def pick_item_no_repeat(
 
 
 def open_help():
-    """Zeigt die Kurzanleitung direkt im Programm — kein PDF-Umweg nötig."""
+    """Kurzanleitung – aufgeräumt, ohne Buttons (PDF/Sprache über das ?-Menü)."""
     win = ctk.CTkToplevel(app)
-    win.title("Kurzanleitung")
-
-    win_w, win_h = 560, 690
+    win.title(tr("Kurzanleitung"))
+    win_w, win_h = 540, 620
     app.update_idletasks()
     x = app.winfo_x() + (app.winfo_width() - win_w) // 2
     y = app.winfo_y() + (app.winfo_height() - win_h) // 2
-    win.geometry(f"{win_w}x{win_h}+{x}+{y}")
-
-    win.resizable(False, True)
-    win.grab_set()
+    win.geometry(f"{win_w}x{win_h}+{max(0, x)}+{max(0, y)}")
+    win.resizable(False, False)
     win.transient(app)
 
-    ctk.CTkLabel(
-        win, text="Kurzanleitung",
-        font=ctk.CTkFont(size=20, weight="bold")
-    ).pack(pady=(16, 10))
-
-    scroll = ctk.CTkScrollableFrame(win, fg_color="transparent")
-    scroll.pack(fill="both", expand=True, padx=20, pady=(0, 10))
-
-    def section(title: str, text: str):
-        ctk.CTkLabel(
-            scroll, text=title, font=ctk.CTkFont(size=14, weight="bold"),
-            anchor="w", justify="left"
-        ).pack(fill="x", pady=(10, 2))
-        ctk.CTkLabel(
-            scroll, text=text, font=ctk.CTkFont(size=12),
-            anchor="w", justify="left", wraplength=500
-        ).pack(fill="x", pady=(0, 4))
-
-    section(
-        "1. Vor dem ersten Start",
-        "Clip-Ordner mit eigenen Videos befüllen — das Programm wird "
-        "ohne Clips ausgeliefert."
-    )
-    section(
-        "2. Musik & Format",
-        "Musikdatei wählen, Format(e) und Schnittgeschwindigkeit festlegen. "
-        "Mehrfachauswahl möglich: Standard ist 16:9-Video plus 58-s-Short "
-        "(stärkster Songabschnitt, ohne Intro/Outro)."
-    )
-    section(
-        "3. Clip-Quelle",
-        "Internen Pool und Stimmung wählen, oder externe Clips/Fotos "
-        "einbinden. Mix-Modus kombiniert beides. Optional: Pre-Intro "
-        "mit eigenem Ton vor die Musik setzen."
-    )
-    section(
-        "4. Rendern",
-        "Auf 'Render' klicken. Ein Sound signalisiert das Ende."
-    )
-    section(
-        "5. Clip-Editor (optional)",
-        "Clips per Drag & Drop umsortieren oder mit '✕ Entfernen' durch "
-        "einen Ersatzclip gleicher Länge austauschen, dann 'Übernehmen'."
-    )
-    section(
-        "6. Fertiges Video",
-        "Über 'Video anschauen', 'Output-Ordner' oder 'YouTube' direkt "
-        "weiterverwenden."
-    )
-    section(
-        "7. Short per URL",
-        "YouTube-Link kopieren, dann 'Short per URL' klicken: Es entsteht ein "
-        "45-s-Short (9:16, Originalton, stärkster Abschnitt) in output/Shorts."
-    )
-
-    ctk.CTkButton(win, text="PDF-Anleitung öffnen", width=180,
-                  fg_color=("gray70", "gray30"), hover_color=("gray60", "gray40"),
-                  command=open_pdf_manual).pack(pady=(4, 4))
-    ctk.CTkButton(win, text="Schließen", width=140, command=win.destroy).pack(pady=(4, 16))
+    ctk.CTkLabel(win, text=tr("Kurzanleitung"),
+                 font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(18, 8))
+    body = ctk.CTkFrame(win, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=26, pady=(0, 16))
+    for _title, _text in HELP_SECTIONS.get(LANG or "de", HELP_SECTIONS["de"]):
+        row = ctk.CTkFrame(body, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 9))
+        ctk.CTkLabel(row, text=_title, font=ctk.CTkFont(size=13, weight="bold"),
+                     anchor="w", justify="left").pack(fill="x")
+        ctk.CTkLabel(row, text=_text, font=ctk.CTkFont(size=12), anchor="w", justify="left",
+                     wraplength=480, text_color=("gray25", "gray78")).pack(fill="x")
 
 
 def open_pdf_manual():
     """Öffnet die ausführliche PDF-Anleitung, falls neben der EXE vorhanden."""
-    pdf = BASE_DIR / "MVG_Bedienungsanleitung.pdf"
+    names = {"en": "MVG_Manual_EN.pdf", "es": "MVG_Manual_ES.pdf"}
+    pdf = BASE_DIR / names.get(LANG, "MVG_Bedienungsanleitung.pdf")
+    if not pdf.exists():
+        pdf = BASE_DIR / "MVG_Bedienungsanleitung.pdf"
     if pdf.exists():
         open_path_portable(pdf)
     else:
-        ui_status("PDF-Anleitung nicht neben dem Programm gefunden")
+        ui_status(tr("PDF-Anleitung nicht neben dem Programm gefunden"))
 
 
 def open_path_portable(p: Path):
@@ -855,7 +1157,7 @@ def build_replacement_segment(
         and not (c["kind"] == "photo" and videos_exist and seg_len < MIN_PHOTO_SEC)
     ]
     if not cands:
-        raise RuntimeError("Keine alternativen Clips verfügbar.")
+        raise RuntimeError(tr("Keine alternativen Clips verfügbar."))
     fresh = [c for c in cands if c["path"] not in used_srcs]
     choice = random.choice(fresh or cands)
 
@@ -938,10 +1240,10 @@ def render_video(
     elif extern_enabled and pool_enabled:
         source_mode = "mix"
     else:
-        raise RuntimeError("Keine Medien gefunden. (Extern/Intern prüfen)")
+        raise RuntimeError(tr("Keine Medien gefunden. (Extern/Intern prüfen)"))
 
     if status_cb:
-        status_cb("Analysiere Musik…")
+        status_cb(tr("Analysiere Musik…"))
     if progress_cb:
         progress_cb(0.02)
 
@@ -950,12 +1252,12 @@ def render_video(
     music_start = 0.0
     if shorts_limited and music_dur_full > SHORTS_MAX_SEC + 10:
         if status_cb:
-            status_cb("Suche stärksten Abschnitt für den Short…")
+            status_cb(tr("Suche stärksten Abschnitt für den Short…"))
         music_start, _why = choose_short_start(audio_path, music_dur_full)
         beat_times = [t - music_start for t in beat_times
                       if music_start <= t < music_start + music_dur]
         if status_cb:
-            status_cb(f"Short: {_why} ab {int(music_start)//60}:{int(music_start)%60:02d}")
+            status_cb(tr("Short: ab {t}").format(t=f"{int(music_start)//60}:{int(music_start)%60:02d}"))
 
     if speed == "gentle":
         target_seconds = CUT_SECONDS_GENTLE
@@ -1055,7 +1357,7 @@ def render_video(
         vorspann_len = 0.0
         if vorspann_src is not None and vorspann_src.exists():
             if status_cb:
-                status_cb("Rendere Pre-Intro…")
+                status_cb(tr("Rendere Pre-Intro…"))
             src_vorspann = prepared_path_video_only(vorspann_src)
             out_seg = seg_dir / f"seg{seg_index:04d}.mp4"
             seg_index += 1
@@ -1085,7 +1387,7 @@ def render_video(
         # Intro
         if intro_src is not None and intro_len > 0.0:
             if status_cb:
-                status_cb("Rendere Intro…")
+                status_cb(tr("Rendere Intro…"))
             src_intro = prepared_path_video_only(intro_src)
             out_seg = seg_dir / f"seg{seg_index:04d}.mp4"
             seg_index += 1
@@ -1137,7 +1439,7 @@ def render_video(
             status_cb(f"{fmt} | {src_txt} | Cuts: {cuts_total}")
 
         if status_cb:
-            status_cb("Rendere Segmente…")
+            status_cb(tr("Rendere Segmente…"))
 
         total_cuts = max(0, len(cut_points2) - 1)
         if source_mode in ("extern_only", "mix") and extern_enabled and not remaining_external:
@@ -1220,7 +1522,7 @@ def render_video(
         # Der Outro-Ton selbst wird separat beim finalen Audio-Mux aus outro_src gemischt.
         if outro_src is not None and outro_src.exists():
             if status_cb:
-                status_cb("Hänge Outro an…")
+                status_cb(tr("Hänge Outro an…"))
 
             outro_seg = seg_dir / f"seg{seg_index:04d}.mp4"
             seg_index += 1
@@ -1245,7 +1547,7 @@ def render_video(
         if progress_cb:
             progress_cb(0.88)
         if status_cb:
-            status_cb("Klebe Segmente…")
+            status_cb(tr("Klebe Segmente…"))
 
         # Zusammensetzen via concat
         video_only = temp_dir / "video_only.mp4"
@@ -1264,7 +1566,7 @@ def render_video(
         run_hidden(cmd_concat)
 
         if status_cb:
-            status_cb("Muxe Audio…")
+            status_cb(tr("Muxe Audio…"))
         if progress_cb:
             progress_cb(0.92)
 
@@ -1368,7 +1670,7 @@ def render_video(
         if progress_cb:
             progress_cb(1.0)
         if status_cb:
-            status_cb(f"Fertig: {out_path.name}")
+            status_cb(tr("Fertig: ") + out_path.name)
 
         seg_meta = []
         for i, p in enumerate(segments_files):
@@ -1420,8 +1722,67 @@ def render_video(
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
+def open_language_dialog(first_start: bool = False):
+    """Sprachauswahl. Beim ersten Start vor dem Hauptfenster, sonst aus der Hilfe."""
+    global LANG
+    if first_start:
+        root = ctk.CTk()
+        root.title("Language / Sprache / Idioma")
+    else:
+        root = ctk.CTkToplevel(app)
+        root.title("Language / Sprache / Idioma")
+        root.grab_set()
+    _w, _h = 360, 250
+    try:
+        root.update_idletasks()
+        if first_start:
+            _x = (root.winfo_screenwidth() - _w) // 2
+            _y = (root.winfo_screenheight() - _h) // 2
+        else:
+            _x = app.winfo_x() + (app.winfo_width() - _w) // 2
+            _y = app.winfo_y() + (app.winfo_height() - _h) // 2
+        root.geometry(f"{_w}x{_h}+{max(0, _x)}+{max(0, _y)}")
+    except Exception:
+        root.geometry(f"{_w}x{_h}")
+    root.resizable(False, False)
+    chosen = {"v": LANG or ""}
+
+    ctk.CTkLabel(root, text="Language · Sprache · Idioma",
+                 font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(20, 12))
+
+    def pick(code):
+        global LANG
+        chosen["v"] = code
+        save_settings({"lang": code})
+        if first_start:
+            LANG = code
+            root.destroy()
+        else:
+            root.destroy()
+            messagebox.showinfo(
+                "Language / Sprache / Idioma",
+                "Bitte das Programm neu starten.\nPlease restart the program.\nReinicia el programa."
+            )
+
+    for code, name in LANGS.items():
+        ctk.CTkButton(root, text=name, width=200, height=36, command=lambda c=code: pick(c)).pack(pady=5)
+
+    if first_start:
+        def on_close():
+            if not chosen["v"]:
+                pick("de")
+        root.protocol("WM_DELETE_WINDOW", on_close)
+        root.mainloop()
+
+
+
+if not LANG:
+    open_language_dialog(first_start=True)
+    if not LANG:
+        LANG = 'de'
+
 app = ctk.CTk()
-app.title("Musik Video Generator  v2.8")
+app.title(tr("Musik Video Generator  v2.9"))
 app.geometry("960x720")
 app.minsize(960, 720)
 
@@ -1436,7 +1797,7 @@ app.geometry(f"960x720+{x}+{y}")
 music_file: Optional[str] = None
 last_output_path: Optional[Path] = None
 
-music_var = ctk.StringVar(value="(keine Musik gewählt)")
+music_var = ctk.StringVar(value=tr("(keine Musik gewählt)"))
 clips_var = ctk.StringVar(value=str(DEFAULT_CLIPS_DIR))
 photos_var = ctk.StringVar(value=str(PHOTOS_DIR))
 
@@ -1454,11 +1815,11 @@ pool_on_var = ctk.BooleanVar(value=False)   # default AUS
 external_var = ctk.BooleanVar(value=False)
 photos_mode_var = ctk.BooleanVar(value=False)
 
-pool_value_var = ctk.StringVar(value="Automatisch")
+pool_value_var = ctk.StringVar(value=tr("Automatisch"))
 pool_hint_var = ctk.StringVar(value="Pool: 10 / 20 / 30 / ALLE")
 
-status_var = ctk.StringVar(value="bereit")
-out_name_var = ctk.StringVar(value="Output: (Musik auswählen)")
+status_var = ctk.StringVar(value=tr("bereit"))
+out_name_var = ctk.StringVar(value=tr("Output: (Musik auswählen)"))
 count_var = ctk.StringVar(value="0")
 
 clips_path_status_var = ctk.StringVar(value="")
@@ -1505,7 +1866,7 @@ def parse_pool_value() -> int:
     v = str(pool_value_var.get()).strip().upper()
     if v == "ALLE":
         return 10**9
-    if v == "AUTOMATISCH":
+    if v in ("AUTOMATISCH", tr("Automatisch").upper()):
         return 10**9
     try:
         return int(v.split()[0])
@@ -1531,7 +1892,7 @@ def get_counts() -> tuple[int, int]:
 def refresh_count():
     v, p = get_counts()
     if bool(photos_mode_var.get()):
-        count_var.set(f"Clips: {v} | Fotos: {p}")
+        count_var.set(tr("Clips: {v} | Fotos: {p}").format(v=v, p=p))
     else:
         count_var.set(str(v))
 
@@ -1539,9 +1900,9 @@ def refresh_count():
 def update_output_label():
     if music_file:
         names = [get_output_path_from_music(music_file, k).name for k in selected_formats()]
-        out_name_var.set("Output: " + "  +  ".join(names))
+        out_name_var.set(tr("Output: ") + "  +  ".join(names))
     else:
-        out_name_var.set("Output: (Musik auswählen)")
+        out_name_var.set(tr("Output: (Musik auswählen)"))
 
 
 def update_source_status():
@@ -1549,37 +1910,37 @@ def update_source_status():
     int_on = bool(pool_on_var.get())
 
     if ext_on and not int_on:
-        ui_status("Quelle: NUR EXTERN")
+        ui_status(tr("Quelle: NUR EXTERN"))
     elif int_on and not ext_on:
-        ui_status("Quelle: NUR INTERN")
+        ui_status(tr("Quelle: NUR INTERN"))
     elif int_on and ext_on:
-        ui_status("Quelle: MIX (Extern bevorzugt)")
+        ui_status(tr("Quelle: MIX (Extern bevorzugt)"))
     else:
-        ui_status("Quelle: (nichts gewählt)")
+        ui_status(tr("Quelle: (nichts gewählt)"))
 
 
 def update_path_status_lines():
     if bool(external_var.get()):
-        clips_path_status_var.set(f"Clips: {clips_var.get()}")
+        clips_path_status_var.set(tr("Clips: {path}").format(path=clips_var.get()))
     else:
-        clips_path_status_var.set(f"Clips (intern): {DEFAULT_CLIPS_DIR}")
+        clips_path_status_var.set(tr("Clips (intern): {path}").format(path=DEFAULT_CLIPS_DIR))
 
     if bool(photos_mode_var.get()):
-        photos_path_status_var.set(f"Fotos: {photos_var.get()}")
+        photos_path_status_var.set(tr("Fotos: {path}").format(path=photos_var.get()))
     else:
         photos_path_status_var.set("")
 
 
 def set_pool_controls_state():
     if not bool(pool_on_var.get()):
-        pool_hint_var.set("Pool: AUS")
+        pool_hint_var.set(tr("Pool: AUS"))
         opt_pool.configure(state="disabled")
         try:
             btn_manual.configure(state="disabled")
         except Exception:
             pass
     else:
-        pool_hint_var.set("Pool: alle / 10 / 20 / 30")
+        pool_hint_var.set(tr("Pool: alle / 10 / 20 / 30"))
         opt_pool.configure(state="normal")
         try:
             btn_manual.configure(state="normal")
@@ -1627,28 +1988,28 @@ def on_pool_toggle():
 def on_moods_changed():
     refresh_count()
     chosen = [m for m, v in mood_vars.items() if bool(v.get())]
-    ui_status("Stimmung: alle" if not chosen else "Stimmung: " + " + ".join(chosen))
+    ui_status(tr("Stimmung: alle") if not chosen else tr("Stimmung: ") + " + ".join(tr(c) for c in chosen))
 
 
 def choose_music():
     global music_file
-    selected = filedialog.askopenfilename(title="Musik auswählen", filetypes=[("Audio", "*.mp3 *.wav")])
+    selected = filedialog.askopenfilename(title=tr("Musik auswählen"), filetypes=[("Audio", "*.mp3 *.wav")])
     if selected:
         music_file = selected
         music_var.set(music_file)
         update_output_label()
-        ui_status("bereit")
+        ui_status(tr("bereit"))
 
 
 def choose_external_clips_folder():
     external_var.set(True)
     on_external_toggle()
-    selected = filedialog.askdirectory(title="Externer Clip Ordner")
+    selected = filedialog.askdirectory(title=tr("Externer Clip-Ordner"))
     if selected:
         clips_var.set(str(Path(selected)))
         refresh_count()
         update_path_status_lines()
-        ui_status("Externer Clip-Ordner gesetzt")
+        ui_status(tr("Externer Clip-Ordner gesetzt"))
     else:
         external_var.set(False)
         on_external_toggle()
@@ -1657,12 +2018,12 @@ def choose_external_clips_folder():
 def choose_photos_folder():
     photos_mode_var.set(True)
     on_photos_toggle()
-    selected = filedialog.askdirectory(title="Foto Ordner")
+    selected = filedialog.askdirectory(title=tr("Foto-Ordner"))
     if selected:
         photos_var.set(str(Path(selected)))
         refresh_count()
         update_path_status_lines()
-        ui_status("Foto-Ordner gesetzt")
+        ui_status(tr("Foto-Ordner gesetzt"))
     else:
         photos_mode_var.set(False)
         on_photos_toggle()
@@ -1684,8 +2045,32 @@ def _ensure_deno() -> Optional[Path]:
     import io, zipfile, urllib.request
     tools.mkdir(exist_ok=True)
     url = "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
-    with urllib.request.urlopen(url, timeout=120) as resp:
-        data = resp.read()
+    import ssl
+    data = None
+    contexts = [None]                      # 1) Windows-Standard
+    try:
+        import certifi
+        contexts.append(ssl.create_default_context(cafile=certifi.where()))   # 2) certifi
+    except Exception:
+        pass
+    for ctx in contexts:
+        try:
+            with urllib.request.urlopen(url, timeout=120, context=ctx) as resp:
+                data = resp.read()
+            break
+        except Exception:
+            data = None
+    if data is None:                       # 3) curl.exe von Windows (nutzt den Windows-Zertifikatsspeicher)
+        tmp_zip = tools / "deno_download.zip"
+        try:
+            subprocess.run(["curl.exe", "-L", "--fail", "-s", "-o", str(tmp_zip), url],
+                           check=True, timeout=180, creationflags=0x08000000)
+            data = tmp_zip.read_bytes()
+        finally:
+            try:
+                tmp_zip.unlink()
+            except Exception:
+                pass
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         target.write_bytes(zf.read("deno.exe"))
     return target
@@ -1702,7 +2087,7 @@ def render_url_short(source: Path, target: Path, start: float, update: Callable[
            "-t", str(URL_SHORT_SEC), "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf, "-af", af,
            "-r", "30", "-c:v", "libx264", "-preset", "fast", "-crf", "20",
            "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(target)]
-    update("Short wird erstellt …")
+    update(tr("Short wird erstellt …"))
     run_hidden(cmd)
 
 
@@ -1711,7 +2096,7 @@ def pick_url_short_start(source: Path, duration: float, update: Callable[[str], 
     fallback = max(0.0, (duration - URL_SHORT_SEC) / 2)
     if duration > 1800:
         return fallback
-    update("Musik wird analysiert …")
+    update(tr("Musik wird analysiert …"))
     wav = Path(tempfile.gettempdir()) / f"mvg_urlshort_{os.getpid()}.wav"
     try:
         subprocess.run([ffmpeg_cmd(), "-y", "-v", "error", "-i", str(source), "-vn",
@@ -1732,13 +2117,13 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
     from urllib.parse import urlsplit
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or parsed.hostname not in YT_HOSTS:
-        raise ValueError("In der Zwischenablage ist kein gültiger YouTube-Link.")
+        raise ValueError(tr("In der Zwischenablage ist kein gültiger YouTube-Link."))
     try:
         import yt_dlp  # type: ignore
     except ImportError:
-        raise RuntimeError("yt-dlp ist nicht installiert (pip install yt-dlp).")
+        raise RuntimeError(tr("yt-dlp ist nicht installiert (pip install yt-dlp)."))
 
-    update("YouTube-Werkzeug wird geprüft …")
+    update(tr("YouTube-Werkzeug wird geprüft …"))
     deno = _ensure_deno()
     out_dir = OUTPUT_DIR / "Shorts"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1747,7 +2132,7 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
         if d.get("status") == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate")
             pct = f" {int(d.get('downloaded_bytes', 0) * 100 / total)}%" if total else ""
-            update("Video wird geladen …" + pct)
+            update(tr("Video wird geladen …") + pct)
 
     with tempfile.TemporaryDirectory(prefix="mvg-short-") as tmp:
         opts = {"noplaylist": True, "quiet": True, "no_warnings": True,
@@ -1759,18 +2144,18 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
             opts["ffmpeg_location"] = str(ff.parent)
         if deno:
             opts["js_runtimes"] = {"deno": {"path": str(deno)}}
-        update("Video wird geprüft …")
+        update(tr("Video wird geprüft …"))
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             if info.get("is_live") or info.get("_type") == "playlist":
-                raise ValueError("Bitte ein einzelnes, abgeschlossenes Video verwenden.")
+                raise ValueError(tr("Bitte ein einzelnes, abgeschlossenes Video verwenden."))
             dur = float(info.get("duration") or 0)
             if dur < URL_SHORT_SEC:
-                raise ValueError(f"Das Video muss mindestens {URL_SHORT_SEC} Sekunden lang sein.")
+                raise ValueError(tr("Das Video muss mindestens {n} Sekunden lang sein.").format(n=URL_SHORT_SEC))
             ydl.download([url])
         srcs = [q for q in Path(tmp).iterdir() if q.suffix.lower() in (".mp4", ".webm", ".mkv", ".mov")]
         if len(srcs) != 1:
-            raise RuntimeError("Die heruntergeladene Videodatei wurde nicht gefunden.")
+            raise RuntimeError(tr("Die heruntergeladene Videodatei wurde nicht gefunden."))
         start = pick_url_short_start(srcs[0], dur, update)
         target = out_dir / f"Short_{info.get('id', 'video')}.mp4"
         render_url_short(srcs[0], target, start, update)
@@ -1787,7 +2172,7 @@ def on_short_url_click():
     except Exception:
         url = ""
     if not url:
-        ui_status("Zwischenablage leer – bitte zuerst einen YouTube-Link kopieren")
+        ui_status(tr("Zwischenablage leer – bitte zuerst einen YouTube-Link kopieren"))
         return
     _url_short_busy = True
     try:
@@ -1802,12 +2187,12 @@ def on_short_url_click():
         global _url_short_busy
         try:
             path = generate_short_from_url(url, upd)
-            app.after(0, ui_status, f"Short fertig: {path.name}  (Ordner output/Shorts)")
+            app.after(0, ui_status, tr("Short fertig: {name}  (Ordner output/Shorts)").format(name=path.name))
             app.after(0, lambda: open_path_portable(path.parent))
         except Exception as e:
             msg = str(e)
-            app.after(0, ui_status, "Short per URL fehlgeschlagen")
-            app.after(0, lambda: messagebox.showerror("Short per URL", msg))
+            app.after(0, ui_status, tr("Short per URL fehlgeschlagen"))
+            app.after(0, lambda: messagebox.showerror(tr("Short per URL"), msg))
         finally:
             _url_short_busy = False
             try:
@@ -1845,10 +2230,10 @@ def on_format_change(changed: Optional[str] = None):
     if not selected_formats():
         format_vars[changed or "normal"].set(True)
         update_output_label()
-        ui_status("Mindestens ein Format muss aktiv sein")
+        ui_status(tr("Mindestens ein Format muss aktiv sein"))
         return
     update_output_label()
-    ui_status("Formate: " + " + ".join(FORMAT_LABELS[k] for k in selected_formats()))
+    ui_status(tr("Formate: ") + " + ".join(FORMAT_LABELS[k] for k in selected_formats()))
 
 
 def open_output_folder():
@@ -1859,7 +2244,7 @@ def open_last_video():
     if last_output_path and last_output_path.exists():
         open_path_portable(last_output_path)
     else:
-        ui_status("kein Video vorhanden")
+        ui_status(tr("kein Video vorhanden"))
 
 
 def open_youtube_upload(explicit_path: Optional[Path] = None):
@@ -1906,7 +2291,7 @@ def on_reset_clicked():
     # Render läuft gerade — nicht im Editor-Modus möglich, aber sicherheitshalber prüfen
     try:
         if btn_render.cget("state") == "disabled":
-            ui_status("Reset nicht möglich während Render läuft")
+            ui_status(tr("Reset nicht möglich während Render läuft"))
             return
     except Exception:
         pass  # Im Editor-Modus existiert btn_render nicht — Reset trotzdem erlauben
@@ -1918,16 +2303,15 @@ def on_reset_clicked():
 
     if cache_count > 0:
         msg = (
-            f"Projekt zurücksetzen?\n\n"
-            f"Cache enthält {cache_count} Datei(en) ({cache_mb:.1f} MB).\n"
-            f"Cache ebenfalls leeren?"
+            tr("Projekt zurücksetzen?\n\nCache enthält {n} Datei(en) ({mb:.1f} MB).\nCache ebenfalls leeren?")
+            .format(n=cache_count, mb=cache_mb)
         )
-        result = messagebox.askyesnocancel("Projekt-Reset", msg)
+        result = messagebox.askyesnocancel(tr("Projekt-Reset"), msg)
         if result is None:       # Abbrechen
             return
         clear_cache = result     # Ja = True, Nein = False
     else:
-        ok = messagebox.askokcancel("Projekt-Reset", "Projekt zurücksetzen?")
+        ok = messagebox.askokcancel(tr("Projekt-Reset"), tr("Projekt zurücksetzen?"))
         if not ok:
             return
         clear_cache = False
@@ -1938,11 +2322,11 @@ def on_reset_clicked():
                 f.unlink()
             except Exception:
                 pass
-        ui_status(f"Cache geleert ({cache_count} Dateien)")
+        ui_status(tr("Cache geleert ({n} Dateien)").format(n=cache_count))
 
     music_file = None
     last_output_path = None
-    music_var.set("(keine Musik gewählt)")
+    music_var.set(tr("(keine Musik gewählt)"))
 
     for _k, _v in FORMAT_DEFAULTS.items():
         format_vars[_k].set(_v)
@@ -1954,7 +2338,7 @@ def on_reset_clicked():
     pool_on_var.set(False)
     external_var.set(False)
     photos_mode_var.set(False)
-    pool_value_var.set("Automatisch")
+    pool_value_var.set(tr("Automatisch"))
     clips_var.set(str(DEFAULT_CLIPS_DIR))
     photos_var.set(str(PHOTOS_DIR))
 
@@ -1985,14 +2369,14 @@ def do_render():
     global last_output_path
 
     if not music_file:
-        ui_status("bitte Musik auswählen")
+        ui_status(tr("bitte Musik auswählen"))
         return
 
     # Ein Auftrag pro gewähltem Format. Das erste (normal > 9:16 > Short) ist das
     # Hauptvideo: nur dafür bleiben die Segmente für den Clip-Editor erhalten.
     jobs = [(k, get_output_path_from_music(music_file, k)) for k in selected_formats()]
     if not jobs:
-        ui_status("Mindestens ein Format muss aktiv sein")
+        ui_status(tr("Mindestens ein Format muss aktiv sein"))
         return
     out_path = jobs[0][1]
     last_output_path = out_path
@@ -2015,21 +2399,21 @@ def do_render():
     ext_photos_on = bool(photos_mode_var.get())
 
     if ext_clips_on and (not clips_folder.exists() or count_video_files(clips_folder) < 1):
-        ui_status("keine externen Clips gefunden")
+        ui_status(tr("keine externen Clips gefunden"))
         return
     if ext_photos_on and (not photos_folder.exists() or count_image_files(photos_folder) < 1):
-        ui_status("keine externen Fotos gefunden")
+        ui_status(tr("keine externen Fotos gefunden"))
         return
     if pool_on and len(clips_from_moods(moods)) < 1 and not (ext_clips_on or ext_photos_on):
-        ui_status("Pool: keine Clips in der gewählten Stimmung")
+        ui_status(tr("Pool: keine Clips in der gewählten Stimmung"))
         return
     if not pool_on and not (ext_clips_on or ext_photos_on):
-        ui_status("Keine Quelle aktiv")
+        ui_status(tr("Keine Quelle aktiv"))
         return
 
     disable_controls(True)
     ui_progress(0.0)
-    ui_status("Starte…")
+    ui_status(tr("Starte…"))
 
     def worker():
         try:
@@ -2083,12 +2467,12 @@ def do_render():
             done_names = [fo.name for (_f, fo) in jobs if fo.exists()]
             app.after(0, play_done_sound)
             if failed:
-                app.after(0, ui_status, "Fertig: " + " + ".join(done_names) + "  —  Fehler bei " + "; ".join(failed))
+                app.after(0, ui_status, tr("Fertig: ") + " + ".join(done_names) + tr("  —  Fehler bei ") + "; ".join(failed))
             else:
-                app.after(0, ui_status, "Fertig: " + " + ".join(done_names))
+                app.after(0, ui_status, tr("Fertig: ") + " + ".join(done_names))
             app.after(0, lambda: _after_render(seg_meta, render_info, music_file, out_path))
         except Exception as e:
-            app.after(0, ui_status, f"Fehler: {e}")
+            app.after(0, ui_status, tr("Fehler: ") + str(e))
         finally:
             app.after(0, lambda: disable_controls(False))
 
@@ -2136,12 +2520,12 @@ def open_clip_selector():
     all_clips = clips_from_moods(moods)
 
     if not all_clips:
-        ui_status("Keine internen Clips gefunden")
+        ui_status(tr("Keine internen Clips gefunden"))
         return
 
     moods_label = ", ".join(moods) if moods else "Alle"
     win = ctk.CTkToplevel(app)
-    win.title(f"Manuelle Clip-Auswahl  —  Stimmung: {moods_label}")
+    win.title(tr("Manuelle Clip-Auswahl  —  Stimmung: {moods}").format(moods=moods_label))
     win.geometry("760x560")
     win.resizable(True, True)
     win.grab_set()
@@ -2162,13 +2546,13 @@ def open_clip_selector():
     # Header
     header = ctk.CTkFrame(win, corner_radius=0, fg_color="transparent")
     header.pack(fill="x", padx=16, pady=(12, 6))
-    ctk.CTkLabel(header, text=f"Clips auswaehlen  ({moods_label})", font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
+    ctk.CTkLabel(header, text=tr("Clips auswählen  ({moods})").format(moods=moods_label), font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
     count_lbl = ctk.CTkLabel(header, text="", font=ctk.CTkFont(size=11))
     count_lbl.pack(side="right")
 
     def update_count():
         n = sum(1 for v in selected.values() if v.get())
-        count_lbl.configure(text=f"{n} / {len(all_clips)} ausgewaehlt")
+        count_lbl.configure(text=tr("{n} / {total} ausgewählt").format(n=n, total=len(all_clips)))
         try:
             refresh_ok_state()
         except Exception:
@@ -2259,8 +2643,8 @@ def open_clip_selector():
             refresh_border(c)
         update_count()
 
-    ctk.CTkButton(btn_row, text="Alle", width=100, command=select_all).pack(side="left", padx=(0, 8))
-    ctk.CTkButton(btn_row, text="Keine", width=100, command=select_none).pack(side="left")
+    ctk.CTkButton(btn_row, text=tr("Alle"), width=100, command=select_all).pack(side="left", padx=(0, 8))
+    ctk.CTkButton(btn_row, text=tr("Keine"), width=100, command=select_none).pack(side="left")
 
     # OK / Abbrechen
     def on_ok():
@@ -2269,14 +2653,14 @@ def open_clip_selector():
         chosen = [p for p, v in selected.items() if v.get()]
         if not chosen:
             manual_clip_selection = None
-            ui_status("Manuelle Auswahl: alle Clips")
+            ui_status(tr("Manuelle Auswahl: alle Clips"))
         elif len(chosen) == len(all_clips):
             manual_clip_selection = None
-            ui_status("Manuelle Auswahl: alle Clips")
+            ui_status(tr("Manuelle Auswahl: alle Clips"))
         else:
             manual_clip_selection = chosen
             manual_clip_moods = moods
-            ui_status(f"Manuelle Auswahl: {len(chosen)} Clips")
+            ui_status(tr("Manuelle Auswahl: {n} Clips").format(n=len(chosen)))
         refresh_count()
         win.destroy()
 
@@ -2286,9 +2670,9 @@ def open_clip_selector():
 
     foot = ctk.CTkFrame(win, fg_color="transparent")
     foot.pack(fill="x", padx=16, pady=(0, 12))
-    btn_ok = ctk.CTkButton(foot, text="OK", width=130, command=on_ok, state="disabled")
+    btn_ok = ctk.CTkButton(foot, text=tr("OK"), width=130, command=on_ok, state="disabled")
     btn_ok.pack(side="right", padx=(8, 0))
-    ctk.CTkButton(foot, text="Abbrechen", width=130, fg_color="gray40",
+    ctk.CTkButton(foot, text=tr("Abbrechen"), width=130, fg_color="gray40",
                   hover_color="gray30", command=on_cancel).pack(side="right")
 
     def refresh_ok_state():
@@ -2302,7 +2686,7 @@ outer.pack(fill="both", expand=True, padx=16, pady=10)
 
 # ── Titel
 ctk.CTkLabel(
-    outer, text="Musik Video Generator",
+    outer, text=tr("Musik Video Generator"),
     font=ctk.CTkFont(size=22, weight="bold")
 ).pack(pady=(12, 6))
 
@@ -2311,17 +2695,17 @@ sec_music = ctk.CTkFrame(outer, corner_radius=12)
 sec_music.pack(fill="x", padx=16, pady=(0, 8))
 sec_music.grid_columnconfigure(1, weight=1)
 
-btn_music = ctk.CTkButton(sec_music, text="Musik wählen", width=160, command=choose_music)
+btn_music = ctk.CTkButton(sec_music, text=tr("Musik wählen"), width=160, command=choose_music)
 btn_music.grid(row=0, column=0, padx=12, pady=10)
 
 ctk.CTkLabel(sec_music, textvariable=music_var, wraplength=580, justify="left").grid(
     row=0, column=1, sticky="w", padx=8, pady=10
 )
 
-btn_reset = ctk.CTkButton(sec_music, text="Reset", width=100, command=on_reset_clicked)
+btn_reset = ctk.CTkButton(sec_music, text=tr("Reset"), width=100, command=on_reset_clicked)
 btn_reset.grid(row=0, column=2, padx=(0, 6), pady=10)
 
-btn_help = ctk.CTkButton(sec_music, text="?", width=36, command=open_help)
+btn_help = ctk.CTkButton(sec_music, text="?", width=36, command=lambda: open_help_menu())
 btn_help.grid(row=0, column=3, padx=(0, 12), pady=10)
 
 # ── Mittlere Zeile: Format | Schnitt | Clip-Pool
@@ -2337,16 +2721,16 @@ sec_fmt.grid(row=0, column=0, sticky="ns", padx=(0, 6), pady=0)
 sec_fmt.pack_propagate(False)
 sec_fmt.grid_propagate(False)
 
-ctk.CTkLabel(sec_fmt, text="Format", font=ctk.CTkFont(size=13, weight="bold")).pack(
+ctk.CTkLabel(sec_fmt, text=tr("Format"), font=ctk.CTkFont(size=13, weight="bold")).pack(
     anchor="w", padx=12, pady=(10, 4)
 )
-cb_fmt_normal = ctk.CTkCheckBox(sec_fmt, text="Normal  16:9", variable=format_vars["normal"],
+cb_fmt_normal = ctk.CTkCheckBox(sec_fmt, text=tr("Normal  16:9"), variable=format_vars["normal"],
                                 command=lambda: on_format_change("normal"))
 cb_fmt_normal.pack(anchor="w", padx=12, pady=(0, 4))
-cb_fmt_shorts = ctk.CTkCheckBox(sec_fmt, text="Normal  9:16", variable=format_vars["shorts"],
+cb_fmt_shorts = ctk.CTkCheckBox(sec_fmt, text=tr("Normal  9:16"), variable=format_vars["shorts"],
                                 command=lambda: on_format_change("shorts"))
 cb_fmt_shorts.pack(anchor="w", padx=12, pady=(0, 4))
-cb_fmt_shorts58 = ctk.CTkCheckBox(sec_fmt, text="Short  9:16 · 58s", variable=format_vars["shorts58"],
+cb_fmt_shorts58 = ctk.CTkCheckBox(sec_fmt, text=tr("Short  9:16 · 58s"), variable=format_vars["shorts58"],
                                   command=lambda: on_format_change("shorts58"))
 cb_fmt_shorts58.pack(anchor="w", padx=12, pady=(0, 10))
 
@@ -2356,18 +2740,18 @@ sec_speed.grid(row=0, column=1, sticky="ns", padx=6, pady=0)
 sec_speed.pack_propagate(False)
 sec_speed.grid_propagate(False)
 
-ctk.CTkLabel(sec_speed, text="Schnitt", font=ctk.CTkFont(size=13, weight="bold")).pack(
+ctk.CTkLabel(sec_speed, text=tr("Schnitt"), font=ctk.CTkFont(size=13, weight="bold")).pack(
     anchor="w", padx=12, pady=(10, 4)
 )
-rb_gentle = ctk.CTkRadioButton(sec_speed, text="Sanft", variable=speed_var, value="gentle")
+rb_gentle = ctk.CTkRadioButton(sec_speed, text=tr("Sanft"), variable=speed_var, value="gentle")
 rb_gentle.pack(anchor="w", padx=12, pady=(0, 4))
-rb_slow = ctk.CTkRadioButton(sec_speed, text="Langsam", variable=speed_var, value="slow")
+rb_slow = ctk.CTkRadioButton(sec_speed, text=tr("Langsam"), variable=speed_var, value="slow")
 rb_slow.pack(anchor="w", padx=12, pady=(0, 4))
-rb_normal = ctk.CTkRadioButton(sec_speed, text="Normal", variable=speed_var, value="normal")
+rb_normal = ctk.CTkRadioButton(sec_speed, text=tr("Normal"), variable=speed_var, value="normal")
 rb_normal.pack(anchor="w", padx=12, pady=(0, 4))
-rb_fast = ctk.CTkRadioButton(sec_speed, text="Schnell", variable=speed_var, value="fast")
+rb_fast = ctk.CTkRadioButton(sec_speed, text=tr("Schnell"), variable=speed_var, value="fast")
 rb_fast.pack(anchor="w", padx=12, pady=(0, 4))
-rb_random = ctk.CTkRadioButton(sec_speed, text="Random", variable=speed_var, value="random")
+rb_random = ctk.CTkRadioButton(sec_speed, text=tr("Random"), variable=speed_var, value="random")
 rb_random.pack(anchor="w", padx=12, pady=(0, 10))
 
 # Clip-Pool
@@ -2375,10 +2759,10 @@ sec_pool = ctk.CTkFrame(mid, corner_radius=12)
 sec_pool.grid(row=0, column=2, sticky="nsew", padx=(6, 0), pady=0)
 sec_pool.grid_columnconfigure(0, weight=1)
 
-ctk.CTkLabel(sec_pool, text="Interner Clip-Pool", font=ctk.CTkFont(size=13, weight="bold")).grid(
+ctk.CTkLabel(sec_pool, text=tr("Interner Clip-Pool"), font=ctk.CTkFont(size=13, weight="bold")).grid(
     row=0, column=0, sticky="w", padx=12, pady=(10, 2)
 )
-ctk.CTkLabel(sec_pool, text="Wähle deine Stimmung",
+ctk.CTkLabel(sec_pool, text=tr("Wähle deine Stimmung"),
              text_color=("gray40", "gray70"), font=ctk.CTkFont(size=11)).grid(
     row=1, column=0, sticky="w", padx=12, pady=(0, 4)
 )
@@ -2386,10 +2770,10 @@ ctk.CTkLabel(sec_pool, text="Wähle deine Stimmung",
 mood_row = ctk.CTkFrame(sec_pool, fg_color="transparent")
 mood_row.grid(row=2, column=0, sticky="w", padx=12, pady=(0, 6))
 
-cb_tr  = ctk.CTkCheckBox(mood_row, text="Traurig",   variable=mood_vars["Traurig"],   command=on_moods_changed)
-cb_neu = ctk.CTkCheckBox(mood_row, text="Neutral",   variable=mood_vars["Neutral"],   command=on_moods_changed)
-cb_glu = ctk.CTkCheckBox(mood_row, text="Glücklich", variable=mood_vars["Glücklich"], command=on_moods_changed)
-cb_ani = ctk.CTkCheckBox(mood_row, text="Animation", variable=mood_vars["Animation"], command=on_moods_changed)
+cb_tr  = ctk.CTkCheckBox(mood_row, text=tr("Traurig"),   variable=mood_vars["Traurig"],   command=on_moods_changed)
+cb_neu = ctk.CTkCheckBox(mood_row, text=tr("Neutral"),   variable=mood_vars["Neutral"],   command=on_moods_changed)
+cb_glu = ctk.CTkCheckBox(mood_row, text=tr("Glücklich"), variable=mood_vars["Glücklich"], command=on_moods_changed)
+cb_ani = ctk.CTkCheckBox(mood_row, text=tr("Animation"), variable=mood_vars["Animation"], command=on_moods_changed)
 cb_tr.grid(row=0, column=0, padx=(0, 12))
 cb_neu.grid(row=0, column=1, padx=(0, 12))
 cb_glu.grid(row=0, column=2, padx=(0, 12))
@@ -2403,14 +2787,14 @@ pool_btn_row.grid(row=4, column=0, sticky="w", padx=12, pady=(0, 10))
 
 opt_pool   = ctk.CTkOptionMenu(pool_btn_row, values=POOL_LABELS, variable=pool_value_var, width=140)
 opt_pool.grid(row=0, column=0, padx=(0, 8))
-btn_manual = ctk.CTkButton(pool_btn_row, text="Manuelle Auswahl", width=150, command=open_clip_selector)
+btn_manual = ctk.CTkButton(pool_btn_row, text=tr("Manuelle Auswahl"), width=150, command=open_clip_selector)
 btn_manual.grid(row=0, column=1)
 
 # ── Clips & Quellen
 sec_files = ctk.CTkFrame(outer, corner_radius=12)
 sec_files.pack(fill="x", padx=16, pady=(0, 8))
 
-ctk.CTkLabel(sec_files, text="Quellen & Optionen", font=ctk.CTkFont(size=13, weight="bold")).pack(
+ctk.CTkLabel(sec_files, text=tr("Quellen & Optionen"), font=ctk.CTkFont(size=13, weight="bold")).pack(
     anchor="w", padx=12, pady=(10, 6)
 )
 
@@ -2418,25 +2802,25 @@ ctk.CTkLabel(sec_files, text="Quellen & Optionen", font=ctk.CTkFont(size=13, wei
 sw_row = ctk.CTkFrame(sec_files, fg_color="transparent")
 sw_row.pack(anchor="w", padx=12, pady=(0, 8))
 
-sw_vorspann = ctk.CTkSwitch(sw_row, text="Pre-Intro", variable=vorspann_var)
+sw_vorspann = ctk.CTkSwitch(sw_row, text=tr("Pre-Intro"), variable=vorspann_var)
 sw_vorspann.grid(row=0, column=0, padx=(0, 16))
 
-sw_intro = ctk.CTkSwitch(sw_row, text="Intro", variable=intro_var)
+sw_intro = ctk.CTkSwitch(sw_row, text=tr("Intro"), variable=intro_var)
 sw_intro.grid(row=0, column=1, padx=(0, 16))
 
-sw_outro = ctk.CTkSwitch(sw_row, text="Outro", variable=outro_var, command=on_outro_toggle)
+sw_outro = ctk.CTkSwitch(sw_row, text=tr("Outro"), variable=outro_var, command=on_outro_toggle)
 sw_outro.grid(row=0, column=2, padx=(0, 16))
 
-sw_title = ctk.CTkSwitch(sw_row, text="Titel", variable=title_var)
+sw_title = ctk.CTkSwitch(sw_row, text=tr("Titel"), variable=title_var)
 sw_title.grid(row=0, column=3, padx=(0, 16))
 
-sw_pool = ctk.CTkSwitch(sw_row, text="Interner Pool", variable=pool_on_var, command=on_pool_toggle)
+sw_pool = ctk.CTkSwitch(sw_row, text=tr("Interner Pool"), variable=pool_on_var, command=on_pool_toggle)
 sw_pool.grid(row=0, column=4, padx=(0, 16))
 
-sw_external = ctk.CTkSwitch(sw_row, text="Externe Clips", variable=external_var, command=on_external_toggle)
+sw_external = ctk.CTkSwitch(sw_row, text=tr("Externe Clips"), variable=external_var, command=on_external_toggle)
 sw_external.grid(row=0, column=5, padx=(0, 16))
 
-sw_photos = ctk.CTkSwitch(sw_row, text="Externe Fotos", variable=photos_mode_var, command=on_photos_toggle)
+sw_photos = ctk.CTkSwitch(sw_row, text=tr("Externe Fotos"), variable=photos_mode_var, command=on_photos_toggle)
 sw_photos.grid(row=0, column=6)
 
 # Ordner-Buttons
@@ -2446,11 +2830,11 @@ btn_row.grid_columnconfigure(0, weight=1)
 btn_row.grid_columnconfigure(1, weight=1)
 btn_row.grid_columnconfigure(2, weight=1)
 
-btn_standard = ctk.CTkButton(btn_row, text="Short per URL (Zwischenablage)", command=on_short_url_click)
+btn_standard = ctk.CTkButton(btn_row, text=tr("Short per URL (Zwischenablage)"), command=on_short_url_click)
 btn_standard.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-btn_external = ctk.CTkButton(btn_row, text="Externe Clips wählen…", command=choose_external_clips_folder)
+btn_external = ctk.CTkButton(btn_row, text=tr("Externe Clips wählen…"), command=choose_external_clips_folder)
 btn_external.grid(row=0, column=1, sticky="ew", padx=(0, 6))
-btn_photos = ctk.CTkButton(btn_row, text="Externe Fotos wählen…", command=choose_photos_folder)
+btn_photos = ctk.CTkButton(btn_row, text=tr("Externe Fotos wählen…"), command=choose_photos_folder)
 btn_photos.grid(row=0, column=2, sticky="ew")
 
 BTN_DEFAULT_FG = btn_standard.cget("fg_color")
@@ -2466,17 +2850,17 @@ ctk.CTkLabel(path_frame, textvariable=photos_path_status_var,
 
 count_line = ctk.CTkFrame(sec_files, fg_color="transparent")
 count_line.pack(anchor="w", padx=12, pady=(0, 10))
-ctk.CTkLabel(count_line, text="Anzahl:").grid(row=0, column=0, padx=(0, 8))
+ctk.CTkLabel(count_line, text=tr("Anzahl:")).grid(row=0, column=0, padx=(0, 8))
 ctk.CTkLabel(count_line, textvariable=count_var).grid(row=0, column=1)
 
 # ── Render + Clips verschieben nebeneinander
 btn_row_render = ctk.CTkFrame(outer, fg_color="transparent")
 btn_row_render.pack(pady=(4, 4))
 
-btn_render = ctk.CTkButton(btn_row_render, text="▶  Render", width=240, height=42, command=do_render)
+btn_render = ctk.CTkButton(btn_row_render, text=tr("▶  Render"), width=240, height=42, command=do_render)
 btn_render.grid(row=0, column=0, padx=(0, 8))
 
-btn_edit = ctk.CTkButton(btn_row_render, text="✏  Clips verschieben", width=200, height=42,
+btn_edit = ctk.CTkButton(btn_row_render, text=tr("✏  Clips verschieben"), width=200, height=42,
                          state="disabled", command=lambda: _enter_editor())
 btn_edit.grid(row=0, column=1)
 
@@ -2494,15 +2878,15 @@ progressbar.grid(row=0, column=0, columnspan=4, sticky="ew", padx=12, pady=(10, 
 status_box = ctk.CTkTextbox(bottom, height=28, wrap="none", activate_scrollbars=False,
                             font=ctk.CTkFont(size=12))
 status_box.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
-status_box.insert("1.0", "bereit")
+status_box.insert("1.0", tr("bereit"))
 status_box.configure(state="disabled")
-ctk.CTkButton(bottom, text="▶  Video anschauen", width=150, command=open_last_video).grid(
+ctk.CTkButton(bottom, text=tr("▶  Video anschauen"), width=150, command=open_last_video).grid(
     row=1, column=1, sticky="e", padx=6, pady=(0, 10)
 )
-ctk.CTkButton(bottom, text="Output-Ordner", width=130, command=open_output_folder).grid(
+ctk.CTkButton(bottom, text=tr("Output-Ordner"), width=130, command=open_output_folder).grid(
     row=1, column=2, sticky="e", padx=6, pady=(0, 10)
 )
-ctk.CTkButton(bottom, text="YouTube", width=110, command=open_youtube_upload).grid(
+ctk.CTkButton(bottom, text=tr("YouTube"), width=110, command=open_youtube_upload).grid(
     row=1, column=3, sticky="e", padx=12, pady=(0, 10)
 )
 
@@ -2554,7 +2938,7 @@ def _enter_editor():
 
     # ── Titel (identisch)
     ctk.CTkLabel(
-        outer, text="Musik Video Generator",
+        outer, text=tr("Musik Video Generator"),
         font=ctk.CTkFont(size=22, weight="bold")
     ).pack(pady=(12, 6))
 
@@ -2564,7 +2948,7 @@ def _enter_editor():
     sec_top.grid_columnconfigure(1, weight=1)
 
     btn_abbrechen = ctk.CTkButton(
-        sec_top, text="✕  Abbrechen", width=160,
+        sec_top, text=tr("✕  Abbrechen"), width=160,
         fg_color=("gray70", "gray30"), hover_color=("gray60", "gray40"),
         command=_cancel_editor
     )
@@ -2573,18 +2957,18 @@ def _enter_editor():
 
     ctk.CTkLabel(
         sec_top,
-        text="Clips per Drag & Drop umsortieren oder mit „✕ Entfernen“ ersetzen – dann Übernehmen",
+        text=tr("Clips per Drag & Drop umsortieren oder mit „✕ Entfernen“ ersetzen – dann Übernehmen"),
         font=ctk.CTkFont(size=12),
         text_color=("gray30", "gray75"),
         anchor="w",
     ).grid(row=0, column=1, sticky="w", padx=8, pady=10)
 
     ctk.CTkButton(
-        sec_top, text="Reset", width=100, command=on_reset_clicked
+        sec_top, text=tr("Reset"), width=100, command=on_reset_clicked
     ).grid(row=0, column=2, padx=(0, 6), pady=10)
 
     ctk.CTkButton(
-        sec_top, text="?", width=36, command=open_help
+        sec_top, text="?", width=36, command=lambda: open_help_menu()
     ).grid(row=0, column=3, padx=(0, 12), pady=10)
 
     # ── Clip-Grid
@@ -2601,7 +2985,7 @@ def _enter_editor():
     # Sofort Ladehinweis zeigen
     ctk.CTkLabel(
         grid_frame,
-        text="⏳  Vorschaubilder werden geladen…",
+        text=tr("⏳  Vorschaubilder werden geladen…"),
         font=ctk.CTkFont(size=18),
         text_color=("gray40", "gray65"),
     ).pack(pady=40)
@@ -2616,7 +3000,7 @@ def _enter_editor():
 
     # ── Übernehmen-Button (an Stelle des Render-Buttons)
     btn_übernehmen = ctk.CTkButton(
-        outer, text="✔  Übernehmen", width=240, height=42,
+        outer, text=tr("✔  Übernehmen"), width=240, height=42,
         state="disabled",
         command=lambda: _do_reorder(audio_path, out_path)
     )
@@ -2625,7 +3009,7 @@ def _enter_editor():
 
     ctk.CTkLabel(
         outer,
-        text="Ziehen = neue Position · Entfernen = zufälliger Ersatzclip gleicher Länge (Intro/Outro bleiben)",
+        text=tr("Ziehen = neue Position · Entfernen = zufälliger Ersatzclip gleicher Länge (Intro/Outro bleiben)"),
         font=ctk.CTkFont(size=11),
         text_color=("gray40", "gray65"),
     ).pack(pady=(0, 4))
@@ -2643,22 +3027,22 @@ def _enter_editor():
     status_ed = ctk.CTkTextbox(bottom_ed, height=28, wrap="none",
                                activate_scrollbars=False, font=ctk.CTkFont(size=12))
     status_ed.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
-    status_ed.insert("1.0", "Clips verschieben oder entfernen, dann Übernehmen klicken")
+    status_ed.insert("1.0", tr("Clips verschieben oder entfernen, dann Übernehmen klicken"))
     status_ed.configure(state="disabled")
     outer._status_ed = status_ed  # type: ignore[attr-defined]
 
     ctk.CTkButton(
-        bottom_ed, text="▶  Video anschauen", width=150,
+        bottom_ed, text=tr("▶  Video anschauen"), width=150,
         command=lambda: open_path_portable(out_path)
     ).grid(row=1, column=1, sticky="e", padx=6, pady=(0, 10))
 
     ctk.CTkButton(
-        bottom_ed, text="Output-Ordner", width=130,
+        bottom_ed, text=tr("Output-Ordner"), width=130,
         command=open_output_folder
     ).grid(row=1, column=2, sticky="e", padx=6, pady=(0, 10))
 
     ctk.CTkButton(
-        bottom_ed, text="YouTube", width=110,
+        bottom_ed, text=tr("YouTube"), width=110,
         command=lambda: open_youtube_upload(out_path)
     ).grid(row=1, column=3, sticky="e", padx=12, pady=(0, 10))
 
@@ -2690,7 +3074,7 @@ def _rebuild_main_ui():
 
     # Titel
     ctk.CTkLabel(
-        outer, text="Musik Video Generator",
+        outer, text=tr("Musik Video Generator"),
         font=ctk.CTkFont(size=22, weight="bold")
     ).pack(pady=(12, 6))
 
@@ -2699,13 +3083,13 @@ def _rebuild_main_ui():
     sec_music = ctk.CTkFrame(outer, corner_radius=12)
     sec_music.pack(fill="x", padx=16, pady=(0, 8))
     sec_music.grid_columnconfigure(1, weight=1)
-    btn_music = ctk.CTkButton(sec_music, text="Musik wählen", width=160, command=choose_music)
+    btn_music = ctk.CTkButton(sec_music, text=tr("Musik wählen"), width=160, command=choose_music)
     btn_music.grid(row=0, column=0, padx=12, pady=10)
     ctk.CTkLabel(sec_music, textvariable=music_var, wraplength=580, justify="left").grid(
         row=0, column=1, sticky="w", padx=8, pady=10)
-    btn_reset = ctk.CTkButton(sec_music, text="Reset", width=100, command=on_reset_clicked)
+    btn_reset = ctk.CTkButton(sec_music, text=tr("Reset"), width=100, command=on_reset_clicked)
     btn_reset.grid(row=0, column=2, padx=(0, 6), pady=10)
-    btn_help = ctk.CTkButton(sec_music, text="?", width=36, command=open_help)
+    btn_help = ctk.CTkButton(sec_music, text="?", width=36, command=lambda: open_help_menu())
     btn_help.grid(row=0, column=3, padx=(0, 12), pady=10)
 
     # Mittlere Sektion wiederherstellen — einfach neu initialisieren
@@ -2715,9 +3099,9 @@ def _rebuild_main_ui():
     global btn_render, btn_edit
     btn_row_render = ctk.CTkFrame(outer, fg_color="transparent")
     btn_row_render.pack(pady=(4, 4))
-    btn_render = ctk.CTkButton(btn_row_render, text="▶  Render", width=240, height=42, command=do_render)
+    btn_render = ctk.CTkButton(btn_row_render, text=tr("▶  Render"), width=240, height=42, command=do_render)
     btn_render.grid(row=0, column=0, padx=(0, 8))
-    btn_edit = ctk.CTkButton(btn_row_render, text="✏  Clips verschieben", width=200, height=42,
+    btn_edit = ctk.CTkButton(btn_row_render, text=tr("✏  Clips verschieben"), width=200, height=42,
                              state="normal" if timeline_seg_meta else "disabled",
                              command=_enter_editor)
     btn_edit.grid(row=0, column=1)
@@ -2734,13 +3118,13 @@ def _rebuild_main_ui():
     status_box = ctk.CTkTextbox(bottom, height=28, wrap="none",
                                 activate_scrollbars=False, font=ctk.CTkFont(size=12))
     status_box.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
-    status_box.insert("1.0", "bereit")
+    status_box.insert("1.0", tr("bereit"))
     status_box.configure(state="disabled")
-    ctk.CTkButton(bottom, text="▶  Video anschauen", width=150, command=open_last_video).grid(
+    ctk.CTkButton(bottom, text=tr("▶  Video anschauen"), width=150, command=open_last_video).grid(
         row=1, column=1, sticky="e", padx=6, pady=(0, 10))
-    ctk.CTkButton(bottom, text="Output-Ordner", width=130, command=open_output_folder).grid(
+    ctk.CTkButton(bottom, text=tr("Output-Ordner"), width=130, command=open_output_folder).grid(
         row=1, column=2, sticky="e", padx=6, pady=(0, 10))
-    ctk.CTkButton(bottom, text="YouTube", width=110, command=open_youtube_upload).grid(
+    ctk.CTkButton(bottom, text=tr("YouTube"), width=110, command=open_youtube_upload).grid(
         row=1, column=3, sticky="e", padx=12, pady=(0, 10))
 
     refresh_count()
@@ -2773,12 +3157,12 @@ def _init_mid_section():
     sec_fmt.grid(row=0, column=0, sticky="ns", padx=(0, 6))
     sec_fmt.pack_propagate(False)
     sec_fmt.grid_propagate(False)
-    ctk.CTkLabel(sec_fmt, text="Format", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
-    cb_fmt_normal = ctk.CTkCheckBox(sec_fmt, text="Normal  16:9", variable=format_vars["normal"], command=lambda: on_format_change("normal"))
+    ctk.CTkLabel(sec_fmt, text=tr("Format"), font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
+    cb_fmt_normal = ctk.CTkCheckBox(sec_fmt, text=tr("Normal  16:9"), variable=format_vars["normal"], command=lambda: on_format_change("normal"))
     cb_fmt_normal.pack(anchor="w", padx=12, pady=(0, 4))
-    cb_fmt_shorts = ctk.CTkCheckBox(sec_fmt, text="Normal  9:16", variable=format_vars["shorts"], command=lambda: on_format_change("shorts"))
+    cb_fmt_shorts = ctk.CTkCheckBox(sec_fmt, text=tr("Normal  9:16"), variable=format_vars["shorts"], command=lambda: on_format_change("shorts"))
     cb_fmt_shorts.pack(anchor="w", padx=12, pady=(0, 4))
-    cb_fmt_shorts58 = ctk.CTkCheckBox(sec_fmt, text="Short  9:16 · 58s", variable=format_vars["shorts58"], command=lambda: on_format_change("shorts58"))
+    cb_fmt_shorts58 = ctk.CTkCheckBox(sec_fmt, text=tr("Short  9:16 · 58s"), variable=format_vars["shorts58"], command=lambda: on_format_change("shorts58"))
     cb_fmt_shorts58.pack(anchor="w", padx=12, pady=(0, 10))
 
     # Schnitt
@@ -2786,30 +3170,30 @@ def _init_mid_section():
     sec_speed.grid(row=0, column=1, sticky="ns", padx=6)
     sec_speed.pack_propagate(False)
     sec_speed.grid_propagate(False)
-    ctk.CTkLabel(sec_speed, text="Schnitt", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
-    rb_gentle = ctk.CTkRadioButton(sec_speed, text="Sanft",    variable=speed_var, value="gentle")
+    ctk.CTkLabel(sec_speed, text=tr("Schnitt"), font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
+    rb_gentle = ctk.CTkRadioButton(sec_speed, text=tr("Sanft"),    variable=speed_var, value="gentle")
     rb_gentle.pack(anchor="w", padx=12, pady=(0, 4))
-    rb_slow   = ctk.CTkRadioButton(sec_speed, text="Langsam",  variable=speed_var, value="slow")
+    rb_slow   = ctk.CTkRadioButton(sec_speed, text=tr("Langsam"),  variable=speed_var, value="slow")
     rb_slow.pack(anchor="w", padx=12, pady=(0, 4))
-    rb_normal = ctk.CTkRadioButton(sec_speed, text="Normal",   variable=speed_var, value="normal")
+    rb_normal = ctk.CTkRadioButton(sec_speed, text=tr("Normal"),   variable=speed_var, value="normal")
     rb_normal.pack(anchor="w", padx=12, pady=(0, 4))
-    rb_fast   = ctk.CTkRadioButton(sec_speed, text="Schnell",  variable=speed_var, value="fast")
+    rb_fast   = ctk.CTkRadioButton(sec_speed, text=tr("Schnell"),  variable=speed_var, value="fast")
     rb_fast.pack(anchor="w", padx=12, pady=(0, 4))
-    rb_random = ctk.CTkRadioButton(sec_speed, text="Random",   variable=speed_var, value="random")
+    rb_random = ctk.CTkRadioButton(sec_speed, text=tr("Random"),   variable=speed_var, value="random")
     rb_random.pack(anchor="w", padx=12, pady=(0, 10))
 
     # Clip-Pool
     sec_pool = ctk.CTkFrame(mid, corner_radius=12)
     sec_pool.grid(row=0, column=2, sticky="nsew", padx=(6, 0))
     sec_pool.grid_columnconfigure(0, weight=1)
-    ctk.CTkLabel(sec_pool, text="Interner Clip-Pool", font=ctk.CTkFont(size=13, weight="bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 2))
-    ctk.CTkLabel(sec_pool, text="Wähle deine Stimmung", text_color=("gray40", "gray70"), font=ctk.CTkFont(size=11)).grid(row=1, column=0, sticky="w", padx=12, pady=(0, 4))
+    ctk.CTkLabel(sec_pool, text=tr("Interner Clip-Pool"), font=ctk.CTkFont(size=13, weight="bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 2))
+    ctk.CTkLabel(sec_pool, text=tr("Wähle deine Stimmung"), text_color=("gray40", "gray70"), font=ctk.CTkFont(size=11)).grid(row=1, column=0, sticky="w", padx=12, pady=(0, 4))
     mood_row = ctk.CTkFrame(sec_pool, fg_color="transparent")
     mood_row.grid(row=2, column=0, sticky="w", padx=12, pady=(0, 6))
-    cb_tr  = ctk.CTkCheckBox(mood_row, text="Traurig",   variable=mood_vars["Traurig"],   command=on_moods_changed)
-    cb_neu = ctk.CTkCheckBox(mood_row, text="Neutral",   variable=mood_vars["Neutral"],   command=on_moods_changed)
-    cb_glu = ctk.CTkCheckBox(mood_row, text="Glücklich", variable=mood_vars["Glücklich"], command=on_moods_changed)
-    cb_ani = ctk.CTkCheckBox(mood_row, text="Animation", variable=mood_vars["Animation"], command=on_moods_changed)
+    cb_tr  = ctk.CTkCheckBox(mood_row, text=tr("Traurig"),   variable=mood_vars["Traurig"],   command=on_moods_changed)
+    cb_neu = ctk.CTkCheckBox(mood_row, text=tr("Neutral"),   variable=mood_vars["Neutral"],   command=on_moods_changed)
+    cb_glu = ctk.CTkCheckBox(mood_row, text=tr("Glücklich"), variable=mood_vars["Glücklich"], command=on_moods_changed)
+    cb_ani = ctk.CTkCheckBox(mood_row, text=tr("Animation"), variable=mood_vars["Animation"], command=on_moods_changed)
     cb_tr.grid(row=0, column=0, padx=(0, 12))
     cb_neu.grid(row=0, column=1, padx=(0, 12))
     cb_glu.grid(row=0, column=2, padx=(0, 12))
@@ -2819,40 +3203,40 @@ def _init_mid_section():
     pool_btn_row.grid(row=4, column=0, sticky="w", padx=12, pady=(0, 10))
     opt_pool   = ctk.CTkOptionMenu(pool_btn_row, values=POOL_LABELS, variable=pool_value_var, width=140)
     opt_pool.grid(row=0, column=0, padx=(0, 8))
-    btn_manual = ctk.CTkButton(pool_btn_row, text="Manuelle Auswahl", width=150, command=open_clip_selector)
+    btn_manual = ctk.CTkButton(pool_btn_row, text=tr("Manuelle Auswahl"), width=150, command=open_clip_selector)
     btn_manual.grid(row=0, column=1)
 
     # Quellen & Optionen
     sec_files = ctk.CTkFrame(outer, corner_radius=12)
     sec_files.pack(fill="x", padx=16, pady=(0, 8))
-    ctk.CTkLabel(sec_files, text="Quellen & Optionen", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(10, 6))
+    ctk.CTkLabel(sec_files, text=tr("Quellen & Optionen"), font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=12, pady=(10, 6))
     sw_row = ctk.CTkFrame(sec_files, fg_color="transparent")
     sw_row.pack(anchor="w", padx=12, pady=(0, 8))
-    sw_vorspann = ctk.CTkSwitch(sw_row, text="Pre-Intro", variable=vorspann_var)
+    sw_vorspann = ctk.CTkSwitch(sw_row, text=tr("Pre-Intro"), variable=vorspann_var)
     sw_vorspann.grid(row=0, column=0, padx=(0, 16))
-    sw_intro = ctk.CTkSwitch(sw_row, text="Intro", variable=intro_var)
+    sw_intro = ctk.CTkSwitch(sw_row, text=tr("Intro"), variable=intro_var)
     sw_intro.grid(row=0, column=1, padx=(0, 16))
-    sw_outro = ctk.CTkSwitch(sw_row, text="Outro", variable=outro_var, command=on_outro_toggle)
+    sw_outro = ctk.CTkSwitch(sw_row, text=tr("Outro"), variable=outro_var, command=on_outro_toggle)
     sw_outro.grid(row=0, column=2, padx=(0, 16))
-    sw_title = ctk.CTkSwitch(sw_row, text="Titel", variable=title_var)
+    sw_title = ctk.CTkSwitch(sw_row, text=tr("Titel"), variable=title_var)
     sw_title.grid(row=0, column=3, padx=(0, 16))
-    sw_pool = ctk.CTkSwitch(sw_row, text="Interner Pool", variable=pool_on_var, command=on_pool_toggle)
+    sw_pool = ctk.CTkSwitch(sw_row, text=tr("Interner Pool"), variable=pool_on_var, command=on_pool_toggle)
     sw_pool.grid(row=0, column=4, padx=(0, 16))
-    sw_external = ctk.CTkSwitch(sw_row, text="Externe Clips", variable=external_var, command=on_external_toggle)
+    sw_external = ctk.CTkSwitch(sw_row, text=tr("Externe Clips"), variable=external_var, command=on_external_toggle)
     sw_external.grid(row=0, column=5, padx=(0, 16))
-    sw_photos = ctk.CTkSwitch(sw_row, text="Externe Fotos", variable=photos_mode_var, command=on_photos_toggle)
+    sw_photos = ctk.CTkSwitch(sw_row, text=tr("Externe Fotos"), variable=photos_mode_var, command=on_photos_toggle)
     sw_photos.grid(row=0, column=6)
     btn_row2 = ctk.CTkFrame(sec_files, fg_color="transparent")
     btn_row2.pack(fill="x", padx=12, pady=(0, 4))
     btn_row2.grid_columnconfigure(0, weight=1)
     btn_row2.grid_columnconfigure(1, weight=1)
     btn_row2.grid_columnconfigure(2, weight=1)
-    btn_standard = ctk.CTkButton(btn_row2, text="Short per URL (Zwischenablage)", command=on_short_url_click)
+    btn_standard = ctk.CTkButton(btn_row2, text=tr("Short per URL (Zwischenablage)"), command=on_short_url_click)
     btn_standard.grid(row=0, column=0, sticky="ew", padx=(0, 6))
     BTN_DEFAULT_FG = btn_standard.cget("fg_color")
-    btn_external = ctk.CTkButton(btn_row2, text="Externe Clips wählen…", command=choose_external_clips_folder)
+    btn_external = ctk.CTkButton(btn_row2, text=tr("Externe Clips wählen…"), command=choose_external_clips_folder)
     btn_external.grid(row=0, column=1, sticky="ew", padx=(0, 6))
-    btn_photos = ctk.CTkButton(btn_row2, text="Externe Fotos wählen…", command=choose_photos_folder)
+    btn_photos = ctk.CTkButton(btn_row2, text=tr("Externe Fotos wählen…"), command=choose_photos_folder)
     btn_photos.grid(row=0, column=2, sticky="ew")
     path_frame = ctk.CTkFrame(sec_files, fg_color="transparent")
     path_frame.pack(fill="x", padx=12, pady=(4, 8))
@@ -2860,7 +3244,7 @@ def _init_mid_section():
     ctk.CTkLabel(path_frame, textvariable=photos_path_status_var, font=ctk.CTkFont(size=11), justify="left").pack(anchor="w")
     count_line = ctk.CTkFrame(sec_files, fg_color="transparent")
     count_line.pack(anchor="w", padx=12, pady=(0, 10))
-    ctk.CTkLabel(count_line, text="Anzahl:").grid(row=0, column=0, padx=(0, 8))
+    ctk.CTkLabel(count_line, text=tr("Anzahl:")).grid(row=0, column=0, padx=(0, 8))
     ctk.CTkLabel(count_line, textvariable=count_var).grid(row=0, column=1)
 
 
@@ -2942,13 +3326,13 @@ def _build_clip_grid(parent, out_path: Path):
         # Outro-/Vorspann-Label / Sperrhinweis
         if is_outro:
             ctk.CTkLabel(
-                frm, text="🔒 Outro",
+                frm, text=tr("🔒 Outro"),
                 font=ctk.CTkFont(size=10, weight="bold"),
                 text_color=("#c0851f", "#e0a53f"),
             ).pack(pady=(0, 3))
         elif is_vorspann:
             ctk.CTkLabel(
-                frm, text="🔒 Pre-Intro",
+                frm, text=tr("🔒 Pre-Intro"),
                 font=ctk.CTkFont(size=10, weight="bold"),
                 text_color=("#7a4fc0", "#b090e0"),
             ).pack(pady=(0, 3))
@@ -2966,7 +3350,7 @@ def _build_clip_grid(parent, out_path: Path):
         # Nur für echte Clips/Fotos — Intro, Pre-Intro und Outro bleiben geschützt.
         if meta.get("src") and not (is_outro or is_vorspann):
             ctk.CTkButton(
-                frm, text="✕  Entfernen", width=TLINE_THUMB_W, height=22,
+                frm, text=tr("✕  Entfernen"), width=TLINE_THUMB_W, height=22,
                 font=ctk.CTkFont(size=11),
                 fg_color=("#c0392b", "#8B0000"), hover_color=("#e74c3c", "#B22222"),
                 corner_radius=4,
@@ -3012,7 +3396,7 @@ def _replace_clip(display_pos: int, out_path: Path):
     ri = timeline_render_info
     pool = ri.get("replace_pool") or []
     if not pool:
-        _editor_status("Keine Ersatz-Clips verfügbar")
+        _editor_status(tr("Keine Ersatz-Clips verfügbar"))
         return
 
     vf = build_vf_base(ri.get("out_w", 1920), ri.get("out_h", 1080),
@@ -3025,7 +3409,7 @@ def _replace_clip(display_pos: int, out_path: Path):
     new_seg = SEGMENTS_DIR / f"seg_r{_replace_counter:04d}.mp4"
 
     _replace_busy = True
-    _editor_status("Ersetze Clip … (wird neu gerendert)")
+    _editor_status(tr("Ersetze Clip … (wird neu gerendert)"))
 
     def worker():
         try:
@@ -3033,7 +3417,7 @@ def _replace_clip(display_pos: int, out_path: Path):
             extract_tline_thumbnail(new_meta["path"])
             app.after(0, lambda: _apply_replacement(orig_idx, new_meta, out_path))
         except Exception as e:
-            app.after(0, lambda: _replacement_failed(e))
+            app.after(0, lambda err=e: _replacement_failed(err))
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -3062,13 +3446,13 @@ def _apply_replacement(orig_idx: int, new_meta: dict, out_path: Path):
         _build_clip_grid(outer._grid_frame, out_path)  # type: ignore[attr-defined]
     except Exception:
         pass
-    _editor_status("Clip ersetzt — mit „Übernehmen“ speichern")
+    _editor_status(tr("Clip ersetzt — mit „Übernehmen“ speichern"))
 
 
 def _replacement_failed(err: Exception):
     global _replace_busy
     _replace_busy = False
-    _editor_status(f"Clip konnte nicht ersetzt werden: {err}")
+    _editor_status(tr("Clip konnte nicht ersetzt werden: ") + str(err))
 
 
 def _restore_replaced_clips():
@@ -3297,7 +3681,7 @@ def _finish_reorder_fail():
 def _do_reorder(audio_path: str, out_path: Path):
     global _reorder_busy
     if _replace_busy:
-        _editor_status("Bitte warten — Clip wird gerade ersetzt …")
+        _editor_status(tr("Bitte warten — Clip wird gerade ersetzt …"))
         return
     if _reorder_busy:
         return
@@ -3474,16 +3858,16 @@ def _do_reorder(audio_path: str, out_path: Path):
             shutil.rmtree(temp_dir, ignore_errors=True)
             app.after(0, _set_progress_ed, 1.0)
             app.after(0, play_done_sound)
-            app.after(0, _set_status_ed, f"Fertig: {out_path.name}")
+            app.after(0, _set_status_ed, tr("Fertig: ") + out_path.name)
             app.after(0, lambda: _finish_reorder_ok(applied_order))
             # Nach Übernehmen: Abbrechen-Button zu "Zurück" ändern (kein Reset der Reihenfolge mehr)
             app.after(0, lambda: outer._btn_abbrechen.configure(  # type: ignore[attr-defined]
-                text="✕  Zurück",
+                text=tr("✕  Zurück"),
                 command=_cancel_editor_keep_order
             ))
         except Exception as e:
             app.after(0, _set_progress_ed, 0.0)
-            app.after(0, _set_status_ed, f"Fehler: {e}")
+            app.after(0, _set_status_ed, tr("Fehler: ") + str(e))
             app.after(0, _finish_reorder_fail)
 
     threading.Thread(target=worker, daemon=True).start()
@@ -3493,12 +3877,354 @@ def _do_reorder(audio_path: str, out_path: Path):
 def on_closing():
     if in_editor_mode:
         ok = messagebox.askokcancel(
-            "Beenden",
-            "Du befindest dich im Editor. Wirklich beenden?"
+            tr("Beenden"),
+            tr("Du befindest dich im Editor. Wirklich beenden?")
         )
         if not ok:
             return
     app.destroy()
+
+# Klick-Hilfe: Titel + ausführliche Erklärung je Bereich
+HELP_TOPICS = {
+"de": {
+ "music": ("Musik wählen", "Hier wählst du die Musikdatei (MP3 oder WAV). Aus dieser Datei entsteht dein Video: Das Programm analysiert den Beat und legt alle Schnitte genau darauf. Die Länge des Videos entspricht der Länge der Musik.\n\nDer Name des fertigen Videos wird aus dem Dateinamen gebildet (z. B. „MeinSong.mp3“ → „MeinSong.mp4“). Auch der Titel, der optional im Video eingeblendet wird, kommt von dort.\n\nOhne Musik kann nicht gerendert werden."),
+ "reset": ("Reset", "Setzt alle Einstellungen auf den Anfangszustand zurück: Musik, Formate, Schnitt, Pool, Stimmung und alle Schalter.\n\nIst ein Zwischenspeicher (Cache) vorhanden, fragt das Programm, ob er ebenfalls geleert werden soll. Der Cache beschleunigt wiederholtes Rendern, kann aber Speicherplatz belegen. Deine fertigen Videos im Ordner output/ bleiben immer erhalten.\n\nWährend ein Render läuft, ist Reset gesperrt."),
+ "help": ("Hilfe (?)", "Öffnet ein kleines Menü:\n• Klick-Hilfe: Du klickst danach auf einen beliebigen Bereich und bekommst eine ausführliche Erklärung.\n• Kurzanleitung und PDF-Anleitung.\n• Sprache: Deutsch, English oder Español (danach Programm neu starten)."),
+ "fmt": ("Format", "Hier legst du fest, welche Videoformate erzeugt werden. Du kannst mehrere gleichzeitig wählen – jedes Format wird als eigene Datei im Ordner output/ gespeichert. Mindestens ein Format muss aktiv bleiben.\n\nStandardmäßig sind 16:9 und der 58-Sekunden-Short aktiv. Mehr Formate bedeuten längere Renderzeit."),
+ "fmt_normal": ("Normal 16:9", "Das klassische Querformat, ideal für YouTube und Computer-Bildschirme. Das Video hat die volle Länge deiner Musik und kann Pre-Intro, Intro, Outro und Titel enthalten.\n\nDateiname: Musiktitel.mp4\nDies ist das Format, das der Clip-Editor („Clips verschieben“) bearbeitet."),
+ "fmt_shorts": ("Normal 9:16", "Hochformat in voller Länge deiner Musik – gedacht für Handy-Wiedergabe, wenn das ganze Lied gezeigt werden soll. Pre-Intro, Intro, Outro und Titel sind möglich.\n\nDateiname: Musiktitel_9x16.mp4"),
+ "fmt_short58": ("Short 9:16 · 58 s", "Ein kurzes Hochformat-Video von genau 58 Sekunden für Instagram Reels, YouTube Shorts und TikTok.\n\nDas Programm sucht automatisch den stärksten Abschnitt deines Songs (meist den Refrain) und schneidet dieses Stück. Bild und Ton werden am Anfang weich eingeblendet und am Ende ausgeblendet. Der Short entsteht immer ohne Pre-Intro, Intro, Outro und Titel, damit er genau 58 Sekunden lang bleibt.\n\nDateiname: Musiktitel_Short.mp4"),
+ "speed": ("Schnitt", "Bestimmt, wie schnell die Clips wechseln. Alle Schnitte werden auf den Beat der Musik gelegt.\n\n• Sanft: etwa alle 3,5 Sekunden – ruhig, atmosphärisch\n• Langsam: etwa alle 2,2 Sekunden – cineastisch\n• Normal: etwa alle 1,7 Sekunden – ausgewogen (Standard)\n• Schnell: etwa alle 0,95 Sekunden – energetisch\n• Random: jeder Schnitt zufällig zwischen 0,95 und 3,5 Sekunden\n\nFür Balladen passt Sanft oder Langsam, für Tanzmusik Schnell."),
+ "pool": ("Interner Clip-Pool", "Der interne Pool nutzt deine eigenen Videoclips aus den Stimmungs-Ordnern im Programmordner (clips/traurig, clips/neutral, clips/gluecklich, clips/animations).\n\nWichtig: Das Programm wird ohne Clips ausgeliefert. Du musst diese Ordner selbst mit Videos füllen, sonst gibt es nichts zu schneiden.\n\nHier wählst du die Stimmung, wie viele Clips verwendet werden und ob du einzelne Clips selbst auswählst."),
+ "mood": ("Stimmung", "Wähle, aus welchen Stimmungs-Ordnern die Clips kommen: Traurig, Neutral, Glücklich und/oder Animation. Du kannst mehrere kombinieren.\n\nIst keine Stimmung angehakt, werden alle Ordner verwendet. Passe die Stimmung zur Musik, damit Bild und Ton zusammenwirken."),
+ "pool_count": ("Anzahl Clips im Pool", "Legt fest, wie viele Clips aus dem Pool verwendet werden.\n\n• Automatisch: alle verfügbaren Clips der gewählten Stimmung\n• 10 / 20 / 30 Clips: eine zufällige Auswahl dieser Größe\n\nEine kleinere Auswahl gibt dem Video einen einheitlicheren Look, eine größere mehr Abwechslung."),
+ "manual": ("Manuelle Auswahl", "Öffnet ein Fenster mit Vorschaubildern aller Clips der gewählten Stimmung. Mit einem Klick wählst du Clips aus oder ab (blauer Rahmen = ausgewählt). Mit „Alle“ und „Keine“ gehst du schneller.\n\nNur die ausgewählten Clips werden verwendet. „OK“ wird aktiv, sobald mindestens ein Clip gewählt ist."),
+ "sw_pre": ("Pre-Intro", "Ein eigenes Video mit eigenem Ton, das VOR der Musik läuft – zum Beispiel eine Begrüßung oder ein Logo-Clip. Die Videodatei legst du in den Ordner pre-intro/; liegen mehrere darin, wird zufällig eine gewählt.\n\nDas Video wird dadurch länger als dein Song, weil das Pre-Intro vorangestellt wird. Standard: aus.\nIm 58-s-Short wird das Pre-Intro nie verwendet."),
+ "sw_intro": ("Intro", "Ein stummes Video am Anfang, unter dem die Musik schon läuft – zum Beispiel ein animierter Vorspann. Die Datei legst du in den Ordner intro/; bei mehreren wird zufällig eine gewählt.\n\nDas Intro zählt zur Songlänge: Danach folgen die normalen Clips, bis die Musik zu Ende ist. Im 58-s-Short wird das Intro nie verwendet."),
+ "sw_outro": ("Outro", "Ein eigenes Video mit eigenem Ton, das NACH der Musik angehängt wird – zum Beispiel ein Abspann oder ein Hinweis zum Abonnieren. Die Datei legst du in den Ordner outro/; bei mehreren wird zufällig eine gewählt.\n\nDas Video wird dadurch länger als der Song. Im Clip-Editor bleibt das Outro immer am Ende. Im 58-s-Short wird das Outro nie verwendet."),
+ "sw_title": ("Titel", "Blendet den Musiktitel unten links im Video ein (Schrift Arial Bold, mit leichtem Schatten). Der Titel stammt aus dem Dateinamen der Musik; Sonderzeichen wie Doppelpunkte werden entfernt.\n\nEr erscheint nach dem Intro, blendet weich ein und nach einigen Sekunden wieder aus. Im 58-s-Short gibt es nie einen Titel."),
+ "sw_pool": ("Interner Pool (Schalter)", "Schaltet die Clips aus den Stimmungs-Ordnern ein oder aus. Ist er aus, werden nur deine eigenen Clips und Fotos verwendet. Sind interner Pool und eigene Clips beide an, ist das der Mix-Modus: eigene Clips werden bevorzugt, der Pool füllt auf."),
+ "sw_ext": ("Externe Clips", "Verwendet Videos aus einem Ordner deiner Wahl, zum Beispiel Material, das nur zu diesem Song passt. Den Ordner wählst du mit „Externe Clips wählen…“.\n\nSind interner Pool und externe Clips zusammen aktiv, werden externe Clips bevorzugt (etwa 70 %) und interne füllen auf. Sind es nur externe Clips, werden sie bei Bedarf wiederholt."),
+ "sw_photos": ("Externe Fotos", "Verwendet Fotos (JPG, PNG, WEBP) aus einem Ordner deiner Wahl als stehende Bilder im Video. Den Ordner wählst du mit „Externe Fotos wählen…“.\n\nFotos werden nicht für sehr kurze Schnitte genutzt, wenn genug Videoclips vorhanden sind."),
+ "short_url": ("Short per URL", "Erstellt einen Short aus einem YouTube-Video: Kopiere zuerst den Link des Videos (Adressleiste im Browser → kopieren), dann klicke diesen Button.\n\nDas Programm lädt das Video, wählt automatisch den stärksten Abschnitt und speichert einen 45-Sekunden-Short im Hochformat 9:16 mit Originalton und weichem Ein- und Ausblenden im Ordner output/Shorts.\n\nBeim ersten Mal wird eine kleine Zusatzkomponente heruntergeladen (Internet nötig). Das Video muss mindestens 45 Sekunden lang sein. Bitte nur Videos verwenden, für die du die Rechte hast."),
+ "btn_ext": ("Externe Clips wählen…", "Wählt den Ordner mit deinen eigenen Videoclips und aktiviert „Externe Clips“. Brichst du die Auswahl ab, wird die Option wieder ausgeschaltet."),
+ "btn_photos": ("Externe Fotos wählen…", "Wählt den Ordner mit deinen eigenen Fotos und aktiviert „Externe Fotos“."),
+ "count": ("Anzahl", "Zeigt, wie viele Clips (und bei aktiven Fotos wie viele Fotos) mit den aktuellen Einstellungen zur Verfügung stehen. Steht hier 0, gibt es nichts zu schneiden – dann fehlen Clips in den Ordnern oder die Quelle ist ausgeschaltet."),
+ "sources": ("Quellen & Optionen", "Hier legst du fest, woher Bild und Zusatz-Inhalte kommen: Pre-Intro, Intro, Outro und Titel sowie interner Pool, externe Clips und externe Fotos. Fahre mit der Maus über einen einzelnen Schalter und klicke darauf, um ihn genauer erklärt zu bekommen."),
+ "render": ("Render", "Startet die Erstellung deines Videos. Das Programm analysiert die Musik, setzt die Schnitte auf den Beat, rendert alle Segmente und fügt Bild und Ton zusammen. Für jedes gewählte Format entsteht eine Datei im Ordner output/.\n\nFortschrittsbalken und Statuszeile zeigen den Stand, ein Klang meldet das Ende. Danach kannst du das Video anschauen oder mit „Clips verschieben“ nachbearbeiten. Mehrere Formate dauern entsprechend länger."),
+ "edit": ("Clips verschieben", "Wird nach dem Rendern aktiv und öffnet den Clip-Editor. Dort siehst du alle Clips deines Videos als Vorschaubilder und kannst sie neu anordnen oder unpassende Clips durch andere ersetzen – ohne das Video komplett neu zu rendern.\n\nBearbeitet wird das erste ausgewählte Format, normalerweise das 16:9-Video."),
+ "status": ("Statuszeile", "Zeigt, was das Programm gerade tut oder getan hat – zum Beispiel „Rendere Segmente…“, „bereit“ oder Hinweise wie „Mindestens ein Format muss aktiv sein“. Bei Fehlern steht hier die Ursache."),
+ "watch": ("Video anschauen", "Öffnet das zuletzt fertiggestellte Video im Standard-Videoplayer deines Computers. Gibt es noch kein Video, zeigt die Statuszeile einen Hinweis."),
+ "outfolder": ("Output-Ordner", "Öffnet den Ordner output/ im Explorer. Dort liegen alle fertigen Videos (und Shorts per URL im Unterordner Shorts)."),
+ "youtube": ("YouTube", "Öffnet die Upload-Seite von YouTube im Browser. Dein Video musst du dort noch auswählen und hochladen – am einfachsten über den Output-Ordner."),
+ "ed_cancel": ("Abbrechen / Zurück", "Verlässt den Clip-Editor und kehrt zum Hauptfenster zurück. Alle Änderungen, die du noch nicht mit „Übernehmen“ gespeichert hast, werden verworfen – entfernte Clips kommen zurück, die Reihenfolge wird zurückgesetzt."),
+ "ed_apply": ("Übernehmen", "Speichert deine Änderungen (neue Reihenfolge und ersetzte Clips) im Video. Das geht schnell, weil nur der Zusammenfüge-Schritt neu läuft. Der Button ist erst aktiv, wenn du etwas geändert hast. Während des Speicherns zeigt die Statuszeile den Fortschritt."),
+ "ed_grid": ("Clip-Übersicht", "Jede Kachel ist ein Clip deines Videos, in der Reihenfolge, in der er vorkommt.\n\n• Anordnen: Kachel anklicken, gedrückt halten und auf eine andere Kachel ziehen – beide tauschen die Plätze.\n• Entfernen: Mit „✕ Entfernen“ unter der Kachel wird der Clip durch einen zufälligen anderen Clip genau gleicher Länge ersetzt, bevorzugt einen, der noch nicht im Video vorkommt. Das Video bleibt dadurch exakt so lang wie dein Song.\n• Gesperrte Kacheln (Schloss) sind Pre-Intro und Outro. Sie bleiben immer am Anfang bzw. Ende.\n\nErst „Übernehmen“ macht die Änderungen endgültig."),
+ "ed_remove": ("✕ Entfernen", "Ersetzt diesen Clip durch einen zufälligen anderen Clip genau gleicher Länge, damit das Video so lang bleibt wie der Song. Das Programm bevorzugt Clips, die noch nicht im Video vorkommen, und rendert nur diesen einen Ausschnitt neu. Gefällt dir der neue Clip nicht, klicke noch einmal auf Entfernen.\n\nMit „Abbrechen“ stellst du alle ersetzten Clips wieder her, mit „Übernehmen“ speicherst du sie."),
+ "ed_lock": ("Gesperrter Clip", "Pre-Intro und Outro sind fest: Das Pre-Intro bleibt immer am Anfang, das Outro immer am Ende. Sie lassen sich weder verschieben noch entfernen, damit ihr eigener Ton sauber vor und nach der Musik abläuft."),
+ "ed_status": ("Statuszeile", "Zeigt im Editor den Stand: zum Beispiel „Clip ersetzt – mit Übernehmen speichern“, „Ersetze Clip…“ oder den Fortschritt beim Speichern."),
+},
+"en": {
+ "music": ("Choose music", "Here you choose the music file (MP3 or WAV). Your video is built from it: the program analyzes the beat and places all cuts exactly on it. The video length equals the length of the music.\n\nThe name of the finished video comes from the file name (e.g. “MySong.mp3” → “MySong.mp4”). The optional on-screen title comes from there too.\n\nWithout music nothing can be rendered."),
+ "reset": ("Reset", "Sets all settings back to their initial state: music, formats, cutting, pool, mood and all switches.\n\nIf a cache exists, the program asks whether to clear it as well. The cache speeds up repeated renders but can take up disk space. Your finished videos in the output/ folder are always kept.\n\nWhile a render is running, Reset is locked."),
+ "help": ("Help (?)", "Opens a small menu:\n• Click help: afterwards you click any area and get a detailed explanation.\n• Quick guide and PDF manual.\n• Language: Deutsch, English or Español (restart the program afterwards)."),
+ "fmt": ("Format", "Here you decide which video formats are created. You can choose several at once – each format is saved as its own file in the output/ folder. At least one format must stay active.\n\nBy default 16:9 and the 58-second short are active. More formats mean longer rendering."),
+ "fmt_normal": ("Normal 16:9", "The classic landscape format, ideal for YouTube and computer screens. The video has the full length of your music and can contain pre-intro, intro, outro and title.\n\nFile name: Title.mp4\nThis is the format the clip editor (“Edit clips”) works on."),
+ "fmt_shorts": ("Normal 9:16", "Portrait at the full length of your music – meant for phone playback when the whole song should be shown. Pre-intro, intro, outro and title are possible.\n\nFile name: Title_9x16.mp4"),
+ "fmt_short58": ("Short 9:16 · 58 s", "A short portrait video of exactly 58 seconds for Instagram Reels, YouTube Shorts and TikTok.\n\nThe program automatically finds the strongest part of your song (usually the chorus) and cuts that piece. Picture and sound fade in softly at the start and out at the end. The short is always created without pre-intro, intro, outro and title so it stays exactly 58 seconds long.\n\nFile name: Title_Short.mp4"),
+ "speed": ("Cutting", "Determines how fast the clips change. All cuts are placed on the beat of the music.\n\n• Gentle: about every 3.5 seconds – calm, atmospheric\n• Slow: about every 2.2 seconds – cinematic\n• Normal: about every 1.7 seconds – balanced (default)\n• Fast: about every 0.95 seconds – energetic\n• Random: every cut random between 0.95 and 3.5 seconds\n\nFor ballads Gentle or Slow fits, for dance music Fast."),
+ "pool": ("Internal clip pool", "The internal pool uses your own video clips from the mood folders in the program folder (clips/traurig, clips/neutral, clips/gluecklich, clips/animations).\n\nImportant: the program ships without clips. You must fill these folders with videos yourself, otherwise there is nothing to cut.\n\nHere you choose the mood, how many clips are used and whether you pick single clips yourself."),
+ "mood": ("Mood", "Choose which mood folders the clips come from: Sad, Neutral, Happy and/or Animation. You can combine several.\n\nIf no mood is ticked, all folders are used. Match the mood to the music so picture and sound work together."),
+ "pool_count": ("Number of clips in the pool", "Sets how many clips from the pool are used.\n\n• Automatic: all available clips of the chosen mood\n• 10 / 20 / 30 clips: a random selection of that size\n\nA smaller selection gives the video a more uniform look, a larger one more variety."),
+ "manual": ("Manual selection", "Opens a window with thumbnails of all clips of the chosen mood. A click selects or deselects a clip (blue frame = selected). “All” and “None” are quicker.\n\nOnly the selected clips are used. “OK” becomes active as soon as at least one clip is chosen."),
+ "sw_pre": ("Pre-intro", "Your own video with its own sound that plays BEFORE the music – for example a greeting or a logo clip. Put the video file in the pre-intro/ folder; if there are several, one is picked at random.\n\nThe video becomes longer than your song because the pre-intro is placed in front. Default: off.\nThe pre-intro is never used in the 58 s short."),
+ "sw_intro": ("Intro", "A silent video at the start with the music already playing underneath – for example an animated opener. Put the file in the intro/ folder; if there are several, one is picked at random.\n\nThe intro counts toward the song length: the normal clips follow until the music ends. The intro is never used in the 58 s short."),
+ "sw_outro": ("Outro", "Your own video with its own sound that is appended AFTER the music – for example credits or a subscribe reminder. Put the file in the outro/ folder; if there are several, one is picked at random.\n\nThe video becomes longer than the song. In the clip editor the outro always stays at the end. The outro is never used in the 58 s short."),
+ "sw_title": ("Title", "Shows the music title at the bottom left of the video (Arial Bold font, soft shadow). The title comes from the music file name; special characters such as colons are removed.\n\nIt appears after the intro, fades in and fades out again after a few seconds. The 58 s short never has a title."),
+ "sw_pool": ("Internal pool (switch)", "Switches the clips from the mood folders on or off. If it is off, only your own clips and photos are used. If the internal pool and your own clips are both on, that is mix mode: your own clips are preferred and the pool fills up."),
+ "sw_ext": ("External clips", "Uses videos from a folder of your choice, for example material that fits only this song. You choose the folder with “Choose external clips…”.\n\nIf the internal pool and external clips are both active, external clips are preferred (about 70 %) and internal ones fill up. With only external clips, they are repeated when needed."),
+ "sw_photos": ("External photos", "Uses photos (JPG, PNG, WEBP) from a folder of your choice as still images in the video. You choose the folder with “Choose external photos…”.\n\nPhotos are not used for very short cuts when enough video clips are available."),
+ "short_url": ("Short from URL", "Creates a short from a YouTube video: first copy the video link (address bar in the browser → copy), then click this button.\n\nThe program downloads the video, automatically picks the strongest section and saves a 45-second portrait 9:16 short with the original sound and soft fade in and out in the folder output/Shorts.\n\nThe first time a small extra component is downloaded (internet required). The video must be at least 45 seconds long. Please only use videos you have the rights to."),
+ "btn_ext": ("Choose external clips…", "Chooses the folder with your own video clips and switches “External clips” on. If you cancel the selection, the option is switched off again."),
+ "btn_photos": ("Choose external photos…", "Chooses the folder with your own photos and switches “External photos” on."),
+ "count": ("Count", "Shows how many clips (and, with photos active, how many photos) are available with the current settings. If it says 0, there is nothing to cut – clips are missing in the folders or the source is switched off."),
+ "sources": ("Sources & options", "Here you decide where picture and extra content come from: pre-intro, intro, outro and title as well as the internal pool, external clips and external photos. Move the mouse over a single switch and click it to get it explained in detail."),
+ "render": ("Render", "Starts creating your video. The program analyzes the music, places the cuts on the beat, renders all segments and joins picture and sound. For every chosen format a file is created in the output/ folder.\n\nThe progress bar and status line show the state, a sound signals the end. Afterwards you can watch the video or refine it with “Edit clips”. Several formats take correspondingly longer."),
+ "edit": ("Edit clips", "Becomes active after rendering and opens the clip editor. There you see all clips of your video as thumbnails and can rearrange them or replace unsuitable clips with others – without re-rendering the whole video.\n\nThe first selected format is edited, normally the 16:9 video."),
+ "status": ("Status line", "Shows what the program is doing or has done – for example “Rendering segments…”, “ready” or hints such as “At least one format must be active”. For errors the cause appears here."),
+ "watch": ("Watch video", "Opens the most recently finished video in your computer's default video player. If there is no video yet, the status line shows a hint."),
+ "outfolder": ("Output folder", "Opens the output/ folder in Explorer. All finished videos are there (and shorts from URL in the Shorts subfolder)."),
+ "youtube": ("YouTube", "Opens the YouTube upload page in the browser. You still have to select and upload your video there – the easiest way is via the output folder."),
+ "ed_cancel": ("Cancel / Back", "Leaves the clip editor and returns to the main window. All changes you have not saved with “Apply” are discarded – removed clips come back and the order is reset."),
+ "ed_apply": ("Apply", "Saves your changes (new order and replaced clips) in the video. This is fast because only the joining step runs again. The button is only active once you changed something. While saving, the status line shows the progress."),
+ "ed_grid": ("Clip overview", "Each tile is a clip of your video, in the order in which it appears.\n\n• Rearrange: click a tile, hold, and drag it onto another tile – the two swap places.\n• Remove: “✕ Remove” under the tile replaces the clip with a random other clip of exactly the same length, preferably one not yet in the video. The video therefore stays exactly as long as your song.\n• Locked tiles (padlock) are pre-intro and outro. They always stay at the start or end.\n\nOnly “Apply” makes the changes final."),
+ "ed_remove": ("✕ Remove", "Replaces this clip with a random other clip of exactly the same length so the video stays as long as the song. The program prefers clips not yet in the video and re-renders only this one section. If you do not like the new clip, click Remove again.\n\n“Cancel” restores all replaced clips, “Apply” saves them."),
+ "ed_lock": ("Locked clip", "Pre-intro and outro are fixed: the pre-intro always stays at the start, the outro always at the end. They can be neither moved nor removed so that their own sound plays cleanly before and after the music."),
+ "ed_status": ("Status line", "Shows the state in the editor: for example “Clip replaced – save with Apply”, “Replacing clip…” or the progress while saving."),
+},
+"es": {
+ "music": ("Elegir música", "Aquí eliges el archivo de música (MP3 o WAV). Tu vídeo se crea a partir de él: el programa analiza el ritmo y coloca todos los cortes exactamente sobre él. La duración del vídeo es la de la música.\n\nEl nombre del vídeo terminado sale del nombre del archivo (p. ej. «MiCancion.mp3» → «MiCancion.mp4»). El título opcional que se muestra en el vídeo también sale de ahí.\n\nSin música no se puede renderizar."),
+ "reset": ("Reiniciar", "Devuelve todos los ajustes al estado inicial: música, formatos, corte, grupo, ánimo y todos los interruptores.\n\nSi hay una caché, el programa pregunta si también debe vaciarse. La caché acelera renderizados repetidos pero puede ocupar espacio. Tus vídeos terminados en la carpeta output/ siempre se conservan.\n\nMientras se renderiza, Reiniciar está bloqueado."),
+ "help": ("Ayuda (?)", "Abre un pequeño menú:\n• Ayuda con clic: después haces clic en cualquier zona y recibes una explicación detallada.\n• Guía rápida y manual PDF.\n• Idioma: Deutsch, English o Español (reinicia el programa después)."),
+ "fmt": ("Formato", "Aquí decides qué formatos de vídeo se crean. Puedes elegir varios a la vez – cada formato se guarda como archivo propio en la carpeta output/. Al menos un formato debe seguir activo.\n\nPor defecto están activos 16:9 y el short de 58 segundos. Más formatos significan más tiempo de renderizado."),
+ "fmt_normal": ("Normal 16:9", "El formato horizontal clásico, ideal para YouTube y pantallas de ordenador. El vídeo dura lo mismo que tu música y puede incluir pre-intro, intro, outro y título.\n\nNombre de archivo: Título.mp4\nEste es el formato que edita el editor de clips («Editar clips»)."),
+ "fmt_shorts": ("Normal 9:16", "Vertical con la duración completa de tu música – pensado para verlo en el móvil cuando se quiere mostrar la canción entera. Son posibles pre-intro, intro, outro y título.\n\nNombre de archivo: Título_9x16.mp4"),
+ "fmt_short58": ("Short 9:16 · 58 s", "Un vídeo vertical corto de exactamente 58 segundos para Instagram Reels, YouTube Shorts y TikTok.\n\nEl programa busca automáticamente la parte más fuerte de tu canción (normalmente el estribillo) y corta ese fragmento. Imagen y sonido entran con suavidad al principio y salen al final. El short se crea siempre sin pre-intro, intro, outro ni título para que dure exactamente 58 segundos.\n\nNombre de archivo: Título_Short.mp4"),
+ "speed": ("Corte", "Determina qué tan rápido cambian los clips. Todos los cortes se colocan sobre el ritmo de la música.\n\n• Suave: aprox. cada 3,5 segundos – tranquilo, atmosférico\n• Lento: aprox. cada 2,2 segundos – cinematográfico\n• Normal: aprox. cada 1,7 segundos – equilibrado (por defecto)\n• Rápido: aprox. cada 0,95 segundos – enérgico\n• Aleatorio: cada corte al azar entre 0,95 y 3,5 segundos\n\nPara baladas va bien Suave o Lento, para música de baile Rápido."),
+ "pool": ("Grupo de clips interno", "El grupo interno usa tus propios clips de vídeo de las carpetas de ánimo en la carpeta del programa (clips/traurig, clips/neutral, clips/gluecklich, clips/animations).\n\nImportante: el programa se entrega sin clips. Debes llenar estas carpetas con vídeos tú mismo, si no no hay nada que cortar.\n\nAquí eliges el ánimo, cuántos clips se usan y si eliges clips concretos tú mismo."),
+ "mood": ("Ánimo", "Elige de qué carpetas de ánimo vienen los clips: Triste, Neutral, Alegre y/o Animación. Puedes combinar varias.\n\nSi no hay ninguna marcada, se usan todas las carpetas. Adapta el ánimo a la música para que imagen y sonido funcionen juntos."),
+ "pool_count": ("Cantidad de clips del grupo", "Define cuántos clips del grupo se usan.\n\n• Automático: todos los clips disponibles del ánimo elegido\n• 10 / 20 / 30 clips: una selección aleatoria de ese tamaño\n\nUna selección menor da al vídeo un aspecto más uniforme, una mayor más variedad."),
+ "manual": ("Selección manual", "Abre una ventana con miniaturas de todos los clips del ánimo elegido. Un clic selecciona o deselecciona un clip (marco azul = seleccionado). «Todos» y «Ninguno» van más rápido.\n\nSolo se usan los clips seleccionados. «Aceptar» se activa en cuanto hay al menos un clip elegido."),
+ "sw_pre": ("Pre-intro", "Tu propio vídeo con su sonido, que se reproduce ANTES de la música – por ejemplo un saludo o un clip con logo. Coloca el archivo de vídeo en la carpeta pre-intro/; si hay varios, se elige uno al azar.\n\nEl vídeo resulta más largo que tu canción porque el pre-intro se antepone. Por defecto: apagado.\nEl pre-intro nunca se usa en el short de 58 s."),
+ "sw_intro": ("Intro", "Un vídeo mudo al principio con la música ya sonando debajo – por ejemplo una apertura animada. Coloca el archivo en la carpeta intro/; si hay varios, se elige uno al azar.\n\nEl intro cuenta dentro de la duración de la canción: después siguen los clips normales hasta que acaba la música. El intro nunca se usa en el short de 58 s."),
+ "sw_outro": ("Outro", "Tu propio vídeo con su sonido, que se añade DESPUÉS de la música – por ejemplo unos créditos o un aviso para suscribirse. Coloca el archivo en la carpeta outro/; si hay varios, se elige uno al azar.\n\nEl vídeo resulta más largo que la canción. En el editor de clips el outro siempre queda al final. El outro nunca se usa en el short de 58 s."),
+ "sw_title": ("Título", "Muestra el título de la música abajo a la izquierda del vídeo (letra Arial Bold, con sombra suave). El título sale del nombre del archivo de música; los caracteres especiales como los dos puntos se eliminan.\n\nAparece tras el intro, entra con suavidad y sale de nuevo tras unos segundos. El short de 58 s nunca lleva título."),
+ "sw_pool": ("Grupo interno (interruptor)", "Activa o desactiva los clips de las carpetas de ánimo. Si está apagado, solo se usan tus propios clips y fotos. Si el grupo interno y tus clips están activos a la vez, es el modo mixto: se prefieren tus clips y el grupo completa."),
+ "sw_ext": ("Clips externos", "Usa vídeos de una carpeta que elijas, por ejemplo material que solo encaja con esta canción. La carpeta se elige con «Elegir clips externos…».\n\nSi el grupo interno y los clips externos están activos a la vez, se prefieren los externos (aprox. 70 %) y los internos completan. Con solo clips externos, se repiten si hace falta."),
+ "sw_photos": ("Fotos externas", "Usa fotos (JPG, PNG, WEBP) de una carpeta que elijas como imágenes fijas en el vídeo. La carpeta se elige con «Elegir fotos externas…».\n\nLas fotos no se usan en cortes muy cortos si hay suficientes clips de vídeo."),
+ "short_url": ("Short desde URL", "Crea un short a partir de un vídeo de YouTube: primero copia el enlace del vídeo (barra de direcciones del navegador → copiar) y luego pulsa este botón.\n\nEl programa descarga el vídeo, elige automáticamente la sección más fuerte y guarda en la carpeta output/Shorts un short vertical 9:16 de 45 segundos con el sonido original y entrada y salida suaves.\n\nLa primera vez se descarga un pequeño componente adicional (hace falta internet). El vídeo debe durar al menos 45 segundos. Usa solo vídeos sobre los que tengas derechos."),
+ "btn_ext": ("Elegir clips externos…", "Elige la carpeta con tus propios clips de vídeo y activa «Clips externos». Si cancelas la selección, la opción se apaga de nuevo."),
+ "btn_photos": ("Elegir fotos externas…", "Elige la carpeta con tus propias fotos y activa «Fotos externas»."),
+ "count": ("Cantidad", "Muestra cuántos clips (y, con fotos activas, cuántas fotos) hay disponibles con los ajustes actuales. Si pone 0, no hay nada que cortar – faltan clips en las carpetas o la fuente está apagada."),
+ "sources": ("Fuentes y opciones", "Aquí decides de dónde vienen la imagen y los contenidos adicionales: pre-intro, intro, outro y título, así como el grupo interno, los clips externos y las fotos externas. Pasa el ratón sobre un interruptor y haz clic para que te lo explique en detalle."),
+ "render": ("Renderizar", "Inicia la creación de tu vídeo. El programa analiza la música, coloca los cortes sobre el ritmo, renderiza todos los segmentos y une imagen y sonido. Por cada formato elegido se crea un archivo en la carpeta output/.\n\nLa barra de progreso y la línea de estado muestran el avance y un sonido avisa del final. Después puedes ver el vídeo o retocarlo con «Editar clips». Con varios formatos tarda más."),
+ "edit": ("Editar clips", "Se activa tras renderizar y abre el editor de clips. Allí ves todos los clips de tu vídeo como miniaturas y puedes reordenarlos o reemplazar los que no encajan por otros – sin renderizar todo el vídeo de nuevo.\n\nSe edita el primer formato elegido, normalmente el vídeo 16:9."),
+ "status": ("Línea de estado", "Muestra lo que el programa está haciendo o ha hecho – por ejemplo «Renderizando segmentos…», «listo» o avisos como «Debe haber al menos un formato activo». En caso de error, aquí aparece la causa."),
+ "watch": ("Ver vídeo", "Abre el último vídeo terminado en el reproductor de vídeo predeterminado de tu ordenador. Si aún no hay vídeo, la línea de estado muestra un aviso."),
+ "outfolder": ("Carpeta de salida", "Abre la carpeta output/ en el Explorador. Allí están todos los vídeos terminados (y los shorts desde URL en la subcarpeta Shorts)."),
+ "youtube": ("YouTube", "Abre la página de subida de YouTube en el navegador. Todavía tienes que elegir y subir allí tu vídeo – lo más fácil es desde la carpeta de salida."),
+ "ed_cancel": ("Cancelar / Atrás", "Sale del editor de clips y vuelve a la ventana principal. Todos los cambios que no hayas guardado con «Aplicar» se descartan – los clips quitados vuelven y el orden se restablece."),
+ "ed_apply": ("Aplicar", "Guarda tus cambios (nuevo orden y clips reemplazados) en el vídeo. Es rápido porque solo se repite el paso de unión. El botón solo se activa cuando has cambiado algo. Mientras se guarda, la línea de estado muestra el progreso."),
+ "ed_grid": ("Vista de clips", "Cada casilla es un clip de tu vídeo, en el orden en que aparece.\n\n• Reordenar: haz clic en una casilla, mantén pulsado y arrástrala sobre otra – las dos intercambian el sitio.\n• Quitar: «✕ Quitar» bajo la casilla reemplaza el clip por otro clip aleatorio de exactamente la misma duración, preferiblemente uno que aún no esté en el vídeo. Así el vídeo dura exactamente lo mismo que tu canción.\n• Las casillas bloqueadas (candado) son pre-intro y outro. Siempre quedan al principio o al final.\n\nSolo «Aplicar» hace definitivos los cambios."),
+ "ed_remove": ("✕ Quitar", "Reemplaza este clip por otro clip aleatorio de exactamente la misma duración para que el vídeo siga durando lo mismo que la canción. El programa prefiere clips que aún no estén en el vídeo y renderiza de nuevo solo este fragmento. Si no te gusta el clip nuevo, pulsa Quitar otra vez.\n\n«Cancelar» restaura todos los clips reemplazados, «Aplicar» los guarda."),
+ "ed_lock": ("Clip bloqueado", "Pre-intro y outro son fijos: el pre-intro siempre queda al principio, el outro siempre al final. No se pueden mover ni quitar para que su propio sonido se reproduzca limpiamente antes y después de la música."),
+ "ed_status": ("Línea de estado", "Muestra el estado en el editor: por ejemplo «Clip reemplazado – guarda con Aplicar», «Reemplazando clip…» o el progreso al guardar."),
+},
+}
+MENU = {
+ "de": {"click": "Klick-Hilfe – Bereich anklicken", "guide": "Kurzanleitung", "pdf": "PDF-Anleitung", "lang": "Sprache / Language",
+        "banner": "❓ Klick-Hilfe: Klicke auf einen Bereich, den du erklärt haben möchtest.", "end": "Beenden (Esc)", "close": "Schließen", "none": "Hier gibt es keine Erklärung. Klicke auf einen Knopf, Schalter oder Bereich."},
+ "en": {"click": "Click help – click an area", "guide": "Quick guide", "pdf": "PDF manual", "lang": "Language / Sprache",
+        "banner": "❓ Click help: click the area you would like explained.", "end": "End (Esc)", "close": "Close", "none": "No explanation here. Click a button, switch or area."},
+ "es": {"click": "Ayuda con clic – haz clic en una zona", "guide": "Guía rápida", "pdf": "Manual PDF", "lang": "Idioma / Language",
+        "banner": "❓ Ayuda con clic: haz clic en la zona que quieras que te explique.", "end": "Terminar (Esc)", "close": "Cerrar", "none": "Aquí no hay explicación. Haz clic en un botón, interruptor o zona."},
+}
+
+
+# --------------------- Klick-Hilfe ("?") ---------------------
+_click_help = {"active": False}
+
+
+def _help_text_map() -> dict:
+    """Beschriftung (in aktueller Sprache) -> Hilfe-Schlüssel."""
+    pairs = [
+        ("Musik wählen", "music"), ("Reset", "reset"), ("?", "help"),
+        ("Normal  16:9", "fmt_normal"), ("Normal  9:16", "fmt_shorts"), ("Short  9:16 · 58s", "fmt_short58"),
+        ("Format", "fmt"), ("Schnitt", "speed"),
+        ("Sanft", "speed"), ("Langsam", "speed"), ("Normal", "speed"), ("Schnell", "speed"), ("Random", "speed"),
+        ("Interner Clip-Pool", "pool"), ("Wähle deine Stimmung", "mood"),
+        ("Traurig", "mood"), ("Neutral", "mood"), ("Glücklich", "mood"), ("Animation", "mood"),
+        ("Manuelle Auswahl", "manual"),
+        ("Quellen & Optionen", "sources"),
+        ("Pre-Intro", "sw_pre"), ("Intro", "sw_intro"), ("Outro", "sw_outro"), ("Titel", "sw_title"),
+        ("Interner Pool", "sw_pool"), ("Externe Clips", "sw_ext"), ("Externe Fotos", "sw_photos"),
+        ("Short per URL (Zwischenablage)", "short_url"),
+        ("Externe Clips wählen…", "btn_ext"), ("Externe Fotos wählen…", "btn_photos"),
+        ("Anzahl:", "count"),
+        ("▶  Render", "render"), ("✏  Clips verschieben", "edit"),
+        ("▶  Video anschauen", "watch"), ("Output-Ordner", "outfolder"), ("YouTube", "youtube"),
+        ("✕  Abbrechen", "ed_cancel"), ("✕  Zurück", "ed_cancel"), ("✔  Übernehmen", "ed_apply"),
+        ("✕  Entfernen", "ed_remove"), ("🔒 Outro", "ed_lock"), ("🔒 Pre-Intro", "ed_lock"),
+    ]
+    return {tr(t): k for t, k in pairs}
+
+
+def _help_target_at(x_root: int, y_root: int):
+    """Findet den kleinsten bekannten Bereich unter dem Mauszeiger -> Hilfe-Schlüssel oder None."""
+    tmap = _help_text_map()
+    named = []
+    g = globals()
+    for name, key in (("sec_fmt", "fmt"), ("sec_speed", "speed"), ("sec_pool", "pool"), ("sec_files", "sources"),
+                      ("opt_pool", "pool_count"), ("count_line", "count"), ("status_box", "status")):
+        w = g.get(name)
+        if w is not None:
+            named.append((w, key))
+    for attr, key in (("_status_ed", "ed_status"), ("_grid_frame", "ed_grid")):
+        w = getattr(outer, attr, None)
+        if w is not None:
+            named.append((w, key))
+    best = None
+    best_area = None
+
+    def consider(w, key):
+        nonlocal best, best_area
+        try:
+            if not w.winfo_viewable():
+                return
+            x0, y0 = w.winfo_rootx(), w.winfo_rooty()
+            ww, hh = w.winfo_width(), w.winfo_height()
+            if ww <= 1 or hh <= 1:
+                return
+            if x0 <= x_root < x0 + ww and y0 <= y_root < y0 + hh:
+                area = ww * hh
+                if best_area is None or area < best_area:
+                    best, best_area = key, area
+        except Exception:
+            pass
+
+    for w, key in named:
+        consider(w, key)
+
+    def walk(w):
+        for c in w.winfo_children():
+            if isinstance(c, ctk.CTkToplevel):
+                continue
+            try:
+                t = c.cget("text")
+            except Exception:
+                t = None
+            if t:
+                key = tmap.get(str(t).strip())
+                if key:
+                    consider(c, key)
+            walk(c)
+
+    walk(app)
+    return best
+
+
+def show_help_topic(key: str):
+    """Ausführliche Erklärung in einem kleinen Fenster."""
+    L = LANG or "de"
+    topics = HELP_TOPICS.get(L, HELP_TOPICS["de"])
+    title, body = topics.get(key, HELP_TOPICS["de"].get(key, ("", "")))
+    prev = _click_help.get("topic")
+    try:
+        if prev is not None and prev.winfo_exists():
+            prev.destroy()
+    except Exception:
+        pass
+    win = ctk.CTkToplevel(app)
+    _click_help["topic"] = win
+    win.title(title)
+    win.resizable(False, False)
+    win.transient(app)
+    ctk.CTkLabel(win, text=title, font=ctk.CTkFont(size=18, weight="bold"), anchor="w",
+                 justify="left", wraplength=480).pack(fill="x", padx=22, pady=(18, 6))
+    ctk.CTkLabel(win, text=body, font=ctk.CTkFont(size=13), anchor="w", justify="left",
+                 wraplength=480).pack(fill="x", padx=22, pady=(0, 10))
+    ctk.CTkButton(win, text=MENU.get(L, MENU["de"])["close"], width=120, command=win.destroy).pack(pady=(4, 16))
+    win.update_idletasks()
+    w_, h_ = 530, win.winfo_reqheight()
+    x = app.winfo_rootx() + max(0, (app.winfo_width() - w_) // 2)
+    y = app.winfo_rooty() + max(0, (app.winfo_height() - h_) // 3)
+    win.geometry(f"{w_}x{h_}+{x}+{y}")
+    try:
+        win.attributes("-topmost", True)
+        win.lift()
+        win.focus_force()
+    except Exception:
+        pass
+
+
+def start_click_help():
+    """Klick-Hilfe: unsichtbare Fläche fängt Klicks ab; Klick auf Bereich -> Erklärung."""
+    if _click_help["active"]:
+        return
+    L = LANG or "de"
+    M = MENU.get(L, MENU["de"])
+    _click_help["active"] = True
+    BAN_H = 40
+
+    banner = ctk.CTkFrame(app, fg_color="#1f6aa5", corner_radius=0, height=BAN_H)
+    banner.place(x=0, y=0, relwidth=1)
+    banner.pack_propagate(False)
+    lbl_var = ctk.StringVar(value=M["banner"])
+    ctk.CTkLabel(banner, textvariable=lbl_var, text_color="white",
+                 font=ctk.CTkFont(size=13, weight="bold"), anchor="w").pack(side="left", padx=14)
+    overlay = tk.Toplevel(app)
+    overlay.overrideredirect(True)
+    try:
+        overlay.attributes("-alpha", 0.01)
+    except Exception:
+        pass
+    overlay.configure(bg="black", cursor="question_arrow")
+
+    def place_overlay():
+        try:
+            app.update_idletasks()
+            overlay.geometry(f"{app.winfo_width()}x{max(1, app.winfo_height() - BAN_H)}"
+                             f"+{app.winfo_rootx()}+{app.winfo_rooty() + BAN_H}")
+        except Exception:
+            pass
+
+    def finish(event=None):
+        if not _click_help["active"]:
+            return
+        _click_help["active"] = False
+        for w in (banner, overlay):
+            try:
+                w.destroy()
+            except Exception:
+                pass
+
+    ctk.CTkButton(banner, text=M["end"], width=120, height=26, fg_color="white", text_color="#1f6aa5",
+                  hover_color="#e8f0f7", command=finish).pack(side="right", padx=12)
+
+    def on_move(e):
+        key = _help_target_at(e.x_root, e.y_root)
+        if key:
+            title = HELP_TOPICS.get(L, HELP_TOPICS["de"]).get(key, ("", ""))[0]
+            lbl_var.set(f"❓ {title}")
+        else:
+            lbl_var.set(M["banner"])
+
+    def on_click(e):
+        key = _help_target_at(e.x_root, e.y_root)
+        if key:
+            finish()              # Modus endet automatisch, dann erscheint die Erklärung
+            show_help_topic(key)
+        else:
+            lbl_var.set(M["none"])
+
+    overlay.bind("<Motion>", on_move)
+    overlay.bind("<Button-1>", on_click)
+    overlay.bind("<Escape>", finish)
+    app.bind("<Escape>", finish, add="+")
+
+    def keep_aligned():
+        if _click_help["active"]:
+            place_overlay()
+            app.after(250, keep_aligned)
+
+    place_overlay()
+    banner.lift()
+    overlay.lift()
+    try:
+        overlay.focus_force()
+    except Exception:
+        pass
+    app.after(250, keep_aligned)
+
+
+def open_help_menu(btn=None):
+    """Menü des "?"-Buttons: Klick-Hilfe, Kurzanleitung, PDF, Sprache."""
+    L = LANG or "de"
+    M = MENU.get(L, MENU["de"])
+    menu = tk.Menu(app, tearoff=0)
+    menu.add_command(label=M["click"], command=start_click_help)
+    menu.add_separator()
+    menu.add_command(label=M["guide"], command=open_help)
+    menu.add_command(label=M["pdf"], command=open_pdf_manual)
+    menu.add_command(label=M["lang"], command=lambda: open_language_dialog(False))
+    try:
+        b = btn or (btn_help if not in_editor_mode else None)
+        x = (b.winfo_rootx() if b else app.winfo_pointerx())
+        y = (b.winfo_rooty() + b.winfo_height() if b else app.winfo_pointery())
+        menu.tk_popup(x, y)
+    finally:
+        menu.grab_release()
+
 
 app.protocol("WM_DELETE_WINDOW", on_closing)
 
