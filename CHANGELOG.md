@@ -1,14 +1,23 @@
 # Changelog — Musik Video Generator
 
-## v2.9
+## v3.0
 
-- **Mehrsprachig: Deutsch, English, Español.** Beim ersten Start wird die Sprache gewählt; änderbar über „?“ → Language (danach Neustart). Die Auswahl steht in `mvg_settings.json` neben dem Programm.
-- **Klick-Hilfe:** Das „?“ öffnet ein Menü (Klick-Hilfe, Kurzanleitung, PDF, Sprache). In der Klick-Hilfe klickt man auf einen beliebigen Knopf oder Bereich und bekommt eine ausführliche Erklärung (Hauptfenster und Clip-Editor); danach beendet sich der Modus von selbst.
-- **Kurzanleitung** aufgeräumt und ohne Buttons; kein Assistent (Klick-Hilfe ersetzt ihn).
-- **Klick-Hilfe:** Das „?“ öffnet ein Menü (Klick-Hilfe, Assistent, Kurzanleitung, PDF, Sprache). In der Klick-Hilfe klickt man auf einen beliebigen Knopf, Schalter oder Bereich – im Hauptfenster und im Clip-Editor – und bekommt eine ausführliche Erklärung (36 Themen, in allen drei Sprachen). Eine blaue Leiste zeigt beim Überfahren den Namen des Bereichs; Beenden mit Esc oder Button.
-- **Bedienungsanleitung als PDF in drei Sprachen** (`MVG_Bedienungsanleitung.pdf`, `MVG_Manual_EN.pdf`, `MVG_Manual_ES.pdf`); der PDF-Button öffnet die PDF der gewählten Sprache.
-- **Fehlerbehebung:** Startfehler `KeyError: 'Sad'` bei englischer/spanischer Oberfläche behoben (Stimmungsnamen wurden fälschlich übersetzt).
-- **Fehlerbehebung:** Meldung beim Fehlschlag von „Clip entfernen“ im Editor konnte einen Programmfehler auslösen (Variable nicht mehr verfügbar) – behoben.
+**Neu**
+
+- **Einfach-Modus:** Beim ersten Start wird nach der Sprache der Modus gewählt (Einfach / Fortgeschritten). Im Einfach-Modus genügt ein schlankes Fenster: Musik, optional ein Intro und die Videos hineinziehen (oder anklicken) und „Render“ drücken. Es entstehen ein 16:9-Video und ein 58-s-Short, ohne internen Pool. Bestehende Nutzer behalten das gewohnte Fenster. Drag & Drop benötigt `tkinterdnd2` (ohne: Klick-Auswahl). Die temporären Clip-Kopien (`simple_clips`) werden nach dem Rendern automatisch gelöscht.
+- **Mehrsprachig: Deutsch, English, Español.** Die Sprache wird beim ersten Start gewählt und ist jederzeit im ⚙-Menü änderbar (danach Neustart). Gespeichert in `mvg_settings.json` neben dem Programm.
+- **⚙-Menü (statt „?“):** Sprache und Modus wechseln, Hilfe (Klick-Hilfe, Kurzanleitung, PDF-Anleitung), „Neueste Version (GitHub)“ und „Mobile Version (MVG Mobil)“.
+- **Klick-Hilfe:** Auf einen beliebigen Knopf oder Bereich klicken und eine ausführliche Erklärung erhalten (36 Themen, drei Sprachen, Hauptfenster und Clip-Editor). Nach einer Erklärung beendet sich der Modus von selbst.
+- **Kurzanleitung** aufgeräumt und ohne Buttons.
+- **Bedienungsanleitung als PDF in drei Sprachen** (`MVG_Bedienungsanleitung.pdf`, `MVG_Manual_EN.pdf`, `MVG_Manual_ES.pdf`) mit neuen Abschnitten „Deinstallation“ und „Die Datei deno.exe“.
+- **Fehlerprotokoll:** Startfehler werden in `mvg_error.log` neben der EXE geschrieben; `mvg_start.log` zeigt die Startphasen.
+
+**Fehlerbehebung**
+
+- Download der Hilfskomponente Deno schlug bei Zertifikatsproblemen fehl (`CERTIFICATE_VERIFY_FAILED`); jetzt mit Rückfallwegen.
+- Der Ordner `output/Shorts` bleibt nicht mehr leer zurück, wenn „Short per URL“ scheitert.
+- Startfehler `KeyError: 'Sad'` bei englischer/spanischer Oberfläche behoben.
+- Meldung beim Fehlschlag von „Clip entfernen“ im Editor konnte einen Programmfehler auslösen – behoben.
 
 ## v2.8
 

@@ -20,7 +20,9 @@ Fertige Windows-EXE (portable, kein Python nötig):
 - **Externe Clips & Fotos** – zusätzliches oder alternatives Bildmaterial einbinden
 - **Pre-Intro, Intro, Outro** – optionale Bausteine, Pre-Intro und Outro mit eigenem Ton
 - **Titel-Overlay** – automatisch aus dem Musikdateinamen generiert
-- **Drei Sprachen & Klick-Hilfe** – Deutsch, English, Español; „?“ erklärt jeden Bereich per Klick
+- **Einfach-Modus** – nur Musik (und optional ein Intro) und Videos hineinziehen und rendern; alternativ der volle Fortgeschritten-Modus
+- **Mobile Version** – [MVG Mobil](https://github.com/loopweb/mvg-mobil) für unterwegs (iPhone, Safari)
+- **Drei Sprachen & Klick-Hilfe** – Deutsch, English, Español; das ⚙-Menü erklärt jeden Bereich per Klick
 - **Short per URL** – YouTube-Link aus der Zwischenablage → 45-s-Short (9:16) mit stärkstem Abschnitt
 - **Clip-Editor** – Clips nach dem Rendern umsortieren oder durch Ersatzclips gleicher Länge austauschen, ohne komplett neu zu rendern
 - **YouTube-Shortcut** – Upload-Seite direkt aus dem Programm öffnen
@@ -38,7 +40,7 @@ Fertige Windows-EXE (portable, kein Python nötig):
 3. Eigene Videoclips in `clips/traurig/`, `clips/neutral/`, `clips/gluecklich/` und `clips/animations/` legen (das Programm wird ohne Clips ausgeliefert)
 4. Musik laden, Optionen wählen, Rendern
 
-Ausführliche Anleitung: `MVG_Bedienungsanleitung.pdf` (Deutsch), `MVG_Manual_EN.pdf`, `MVG_Manual_ES.pdf` (liegt neben der EXE, oder direkt im Programm über den `?`-Button erreichbar)
+Ausführliche Anleitung: `MVG_Bedienungsanleitung.pdf` (Deutsch), `MVG_Manual_EN.pdf`, `MVG_Manual_ES.pdf` (liegt neben der EXE, oder direkt im Programm über das ⚙-Menü erreichbar)
 
 ### Für Entwickler
 
@@ -87,3 +89,7 @@ Python 3.12 · CustomTkinter · librosa · FFmpeg · PyInstaller
 ## Lizenz
 
 MIT – siehe [LICENSE](LICENSE). FFmpeg unterliegt eigenen Lizenzbedingungen und ist nicht Teil dieses Repos.
+
+## Deinstallation
+
+MVG wird nicht installiert. Zum Entfernen einfach den MVG-Ordner löschen (vorher fertige Videos aus `output/` und eigene Clips sichern). Die für „Short per URL“ nachgeladene `tools/deno.exe` liegt ebenfalls in diesem Ordner.

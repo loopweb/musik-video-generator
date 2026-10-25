@@ -1,4 +1,4 @@
-# Musik Video Generator v2.9
+# Musik Video Generator v3.0
 
 from __future__ import annotations
 
@@ -95,6 +95,43 @@ import random
 import shutil
 import tempfile
 from typing import Callable, Optional, Tuple
+
+# ── Fehlerprotokoll: Startfehler sichtbar machen (EXE ist "windowed" und würde sonst still scheitern)
+def _log_error(text: str, show: bool = False):
+    try:
+        base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+        with open(base / "mvg_error.log", "a", encoding="utf-8") as f:
+            import datetime as _dt
+            f.write(f"--- {_dt.datetime.now():%Y-%m-%d %H:%M:%S} ---\n{text}\n")
+    except Exception:
+        pass
+    if show:
+        try:
+            import tkinter.messagebox as _mb
+            _mb.showerror("Musik Video Generator", text[-1500:] + "\n\n(mvg_error.log)")
+        except Exception:
+            pass
+
+
+def _trace(msg: str):
+    """Startphasen mitschreiben (mvg_start.log, wird bei jedem Start neu begonnen)."""
+    try:
+        base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+        mode = "w" if msg == "start" else "a"
+        with open(base / "mvg_start.log", mode, encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
+
+
+def _excepthook(et, ev, tb):
+    import traceback
+    _log_error("".join(traceback.format_exception(et, ev, tb)), show=True)
+
+
+sys.excepthook = _excepthook
+_trace("start")
+
 
 import numpy as np
 import librosa
@@ -231,7 +268,7 @@ TRANSLATIONS = {
   "Manuelle Clip-Auswahl  —  Stimmung: {moods}": "Manual clip selection  —  Mood: {moods}",
   "Mindestens ein Format muss aktiv sein": "At least one format must be active",
   "Musik Video Generator": "Music Video Generator",
-  "Musik Video Generator  v2.9": "Music Video Generator  v2.9",
+  "Musik Video Generator  v3.0": "Music Video Generator  v3.0",
   "Musik auswählen": "Choose music",
   "Musik wird analysiert …": "Analyzing music …",
   "Musik wählen": "Choose music",
@@ -368,7 +405,7 @@ TRANSLATIONS = {
   "Manuelle Clip-Auswahl  —  Stimmung: {moods}": "Selección manual de clips  —  Ánimo: {moods}",
   "Mindestens ein Format muss aktiv sein": "Debe haber al menos un formato activo",
   "Musik Video Generator": "Generador de vídeos musicales",
-  "Musik Video Generator  v2.9": "Generador de vídeos musicales  v2.9",
+  "Musik Video Generator  v3.0": "Generador de vídeos musicales  v3.0",
   "Musik auswählen": "Elegir música",
   "Musik wird analysiert …": "Analizando la música …",
   "Musik wählen": "Elegir música",
@@ -456,7 +493,7 @@ HELP_SECTIONS = {
   ["5. Rendern", "Auf „Render“ klicken. Ein Klang meldet das Ende, das Video liegt in output/."],
   ["6. Nachbearbeiten", "„Clips verschieben“: Clips umsortieren oder mit „✕ Entfernen“ ersetzen."],
   ["7. Short per URL", "YouTube-Link kopieren, „Short per URL“ klicken – 45-s-Short in output/Shorts."],
-  ["8. Hilfe", "Über das „?“: Klick-Hilfe (Bereich anklicken, Erklärung lesen), PDF, Sprache."]
+  ["8. Hilfe", "Über das „⚙“: Klick-Hilfe (Bereich anklicken, Erklärung lesen), PDF, Sprache, Modus, Updates, Mobile Version."]
  ],
  "en": [
   ["1. Prepare", "Fill the clip folders with your own videos – the program ships without clips."],
@@ -466,7 +503,7 @@ HELP_SECTIONS = {
   ["5. Render", "Click “Render”. A sound signals the end, the video is in output/."],
   ["6. Refine", "“Edit clips”: reorder clips or replace them with “✕ Remove”."],
   ["7. Short from URL", "Copy a YouTube link, click “Short from URL” – 45 s short in output/Shorts."],
-  ["8. Help", "Via “?”: click help (click an area, read the explanation), PDF, language."]
+  ["8. Help", "Via “⚙”: click help (click an area, read the explanation), PDF, language, mode, updates, mobile version."]
  ],
  "es": [
   ["1. Preparar", "Llena las carpetas de clips con tus vídeos – el programa se entrega sin clips."],
@@ -476,7 +513,7 @@ HELP_SECTIONS = {
   ["5. Renderizar", "Pulsa «Renderizar». Un sonido avisa del final, el vídeo está en output/."],
   ["6. Retocar", "«Editar clips»: reordena clips o reemplázalos con «✕ Quitar»."],
   ["7. Short desde URL", "Copia un enlace de YouTube y pulsa «Short desde URL» – short de 45 s en output/Shorts."],
-  ["8. Ayuda", "Con «?»: ayuda con clic (haz clic en una zona y lee la explicación), PDF, idioma."]
+  ["8. Ayuda", "Con «⚙»: ayuda con clic (haz clic en una zona y lee la explicación), PDF, idioma, modo, actualizaciones, versión móvil."]
  ]
 }
 
@@ -905,7 +942,7 @@ def pick_item_no_repeat(
 
 
 def open_help():
-    """Kurzanleitung – aufgeräumt, ohne Buttons (PDF/Sprache über das ?-Menü)."""
+    """Kurzanleitung – aufgeräumt, ohne Buttons (PDF/Sprache über das ⚙-Menü)."""
     win = ctk.CTkToplevel(app)
     win.title(tr("Kurzanleitung"))
     win_w, win_h = 540, 620
@@ -1197,6 +1234,7 @@ def render_video(
     status_cb: Optional[Callable[[str], None]] = None,
     progress_cb: Optional[Callable[[float], None]] = None,
     persist_segments: bool = True,
+    intro_override: Optional[Path] = None,
 ) -> Tuple[int, int, int, list[dict], dict]:
 
     # Der 58s-Short ist immer "pur": ohne Pre-Intro, Intro und Outro.
@@ -1281,7 +1319,7 @@ def render_video(
     intro_src: Optional[Path] = None
     intro_len = 0.0
     if use_intro:
-        intro_candidates = list_video_files(INTRO_DIR)
+        intro_candidates = [intro_override] if intro_override else list_video_files(INTRO_DIR)
         if intro_candidates:
             intro_src = random.choice(intro_candidates)   # random statt immer [0]
             intro_len = min(ffprobe_duration(intro_src), music_dur)
@@ -1722,37 +1760,71 @@ def render_video(
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
+def _boot_root(dnd: bool = False):
+    """Das eine große Hauptfenster – wird von Sprach-/Modusabfrage und danach vom Programm genutzt."""
+    if True:
+        r = None
+        # Drag & Drop nur, wenn es gebraucht wird (Einfach-Modus bzw. erster Start)
+        if _HAS_DND and dnd:
+            try:
+                class _DndCTk(ctk.CTk, TkinterDnD.DnDWrapper):
+                    def __init__(self, *a, **k):
+                        super().__init__(*a, **k)
+                        self.TkdndVersion = TkinterDnD._require(self)
+                r = _DndCTk()
+            except Exception as e:
+                _log_error("Drag&Drop nicht verfügbar: " + repr(e))
+                try:
+                    import tkinter as _tk
+                    root_old = getattr(_tk, "_default_root", None)
+                    if root_old is not None:
+                        root_old.destroy()
+                except Exception:
+                    pass
+                r = None
+        if r is None:
+            r = ctk.CTk()
+        r.title(tr("Musik Video Generator  v3.0"))
+        r.geometry("960x720")
+        r.minsize(960, 720)
+        r.update_idletasks()
+        r.geometry(f"960x720+{max(0, (r.winfo_screenwidth() - 960) // 2)}+{max(0, (r.winfo_screenheight() - 720) // 2)}")
+        try:
+            r.report_callback_exception = lambda et, ev, tb: _log_error("".join(__import__("traceback").format_exception(et, ev, tb)), show=True)
+        except Exception:
+            pass
+    return r
+
+
 def open_language_dialog(first_start: bool = False):
-    """Sprachauswahl. Beim ersten Start vor dem Hauptfenster, sonst aus der Hilfe."""
+    """Sprachauswahl. Beim ersten Start im großen Hauptfenster, sonst als kleines Fenster aus dem Menü."""
     global LANG
     if first_start:
-        root = ctk.CTk()
-        root.title("Language / Sprache / Idioma")
+        root = _boot_root()
     else:
         root = ctk.CTkToplevel(app)
         root.title("Language / Sprache / Idioma")
         root.grab_set()
-    _w, _h = 360, 250
-    try:
-        root.update_idletasks()
-        if first_start:
-            _x = (root.winfo_screenwidth() - _w) // 2
-            _y = (root.winfo_screenheight() - _h) // 2
-        else:
+    if first_start:
+        box = ctk.CTkFrame(root, fg_color="transparent")
+        box.place(relx=0.5, rely=0.5, anchor="center")
+    else:
+        _w, _h = 360, 250
+        try:
+            root.update_idletasks()
             _x = app.winfo_x() + (app.winfo_width() - _w) // 2
             _y = app.winfo_y() + (app.winfo_height() - _h) // 2
-        root.geometry(f"{_w}x{_h}+{max(0, _x)}+{max(0, _y)}")
-    except Exception:
-        root.geometry(f"{_w}x{_h}")
-    root.resizable(False, False)
-    chosen = {"v": LANG or ""}
+            root.geometry(f"{_w}x{_h}+{max(0, _x)}+{max(0, _y)}")
+        except Exception:
+            root.geometry(f"{_w}x{_h}")
+        root.resizable(False, False)
+        box = root
 
-    ctk.CTkLabel(root, text="Language · Sprache · Idioma",
-                 font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(20, 12))
+    ctk.CTkLabel(box, text="Language · Sprache · Idioma",
+                 font=ctk.CTkFont(size=22 if first_start else 16, weight="bold")).pack(pady=(20, 14))
 
     def pick(code):
         global LANG
-        chosen["v"] = code
         save_settings({"lang": code})
         if first_start:
             LANG = code
@@ -1765,24 +1837,441 @@ def open_language_dialog(first_start: bool = False):
             )
 
     for code, name in LANGS.items():
-        ctk.CTkButton(root, text=name, width=200, height=36, command=lambda c=code: pick(c)).pack(pady=5)
+        ctk.CTkButton(box, text=name, width=260 if first_start else 200, height=44 if first_start else 36,
+                      command=lambda c=code: pick(c)).pack(pady=6)
 
     if first_start:
         def on_close():
-            if not chosen["v"]:
-                pick("de")
+            root.destroy()
+            os._exit(0)
         root.protocol("WM_DELETE_WINDOW", on_close)
         root.mainloop()
 
 
 
+# ===================== MODUS: EINFACH / FORTGESCHRITTEN =====================
+MODE = ""   # "simple" | "advanced" (wird beim ersten Start abgefragt)
+
+TRANSLATIONS.setdefault("en", {}).update({
+    "Modus wählen": "Choose mode",
+    "Wie möchtest du das Programm nutzen?": "How would you like to use the program?",
+    "Einfach\nnur Musik und Videos hineinziehen": "Simple\njust drop in music and videos",
+    "Fortgeschritten\nalle Einstellungen": "Advanced\nall settings",
+    "Der Modus kann jederzeit im ⚙-Menü geändert werden.": "You can change the mode any time in the ⚙ menu.",
+    "Modus wechseln": "Change mode",
+    "Musik hierher ziehen\n(oder klicken zum Auswählen)": "Drop your music here\n(or click to choose)",
+    "Videos hierher ziehen\n(oder klicken zum Auswählen)": "Drop your videos here\n(or click to choose)",
+    "Musik: ": "Music: ",
+    "Videos: ": "Videos: ",
+    " Videos": " videos",
+    "Ordner öffnen": "Open folder",
+    "Bitte zuerst Musik und Videos hinzufügen.": "Please add music and videos first.",
+    "Videos werden vorbereitet …": "Preparing videos …",
+    "Ziehen und Ablegen ist nicht verfügbar – bitte klicken.": "Drag and drop is not available – please click.",
+    "Zurücksetzen": "Reset",
+    "Klick-Hilfe": "Click help",
+    "Neueste Version (GitHub)": "Latest version (GitHub)",
+    "Mobile Version (MVG Mobil)": "Mobile version (MVG Mobile)",
+    "📱 Auch fürs Handy: MVG Mobil": "📱 Also for your phone: MVG Mobile",
+    "PDF-Anleitung": "PDF manual",
+    "Sprache / Language": "Language / Sprache",
+    "Intro: ": "Intro: ",
+    "Intro hierher ziehen (optional)\n(oder klicken zum Auswählen)": "Drop an intro here (optional)\n(or click to choose)",
+    "Intro wählen": "Choose intro",
+    "Bitte das Programm neu starten.": "Please restart the program.",
+    "Videos wählen": "Choose videos",
+    "Rendern läuft noch. Wirklich beenden?": "Rendering is still running. Really quit?",
+})
+TRANSLATIONS.setdefault("es", {}).update({
+    "Modus wählen": "Elegir modo",
+    "Wie möchtest du das Programm nutzen?": "¿Cómo quieres usar el programa?",
+    "Einfach\nnur Musik und Videos hineinziehen": "Sencillo\nsolo arrastra música y vídeos",
+    "Fortgeschritten\nalle Einstellungen": "Avanzado\ntodos los ajustes",
+    "Der Modus kann jederzeit im ⚙-Menü geändert werden.": "Puedes cambiar el modo en cualquier momento en el menú ⚙.",
+    "Modus wechseln": "Cambiar modo",
+    "Musik hierher ziehen\n(oder klicken zum Auswählen)": "Arrastra aquí la música\n(o haz clic para elegir)",
+    "Videos hierher ziehen\n(oder klicken zum Auswählen)": "Arrastra aquí los vídeos\n(o haz clic para elegir)",
+    "Musik: ": "Música: ",
+    "Videos: ": "Vídeos: ",
+    " Videos": " vídeos",
+    "Ordner öffnen": "Abrir carpeta",
+    "Bitte zuerst Musik und Videos hinzufügen.": "Primero añade música y vídeos.",
+    "Videos werden vorbereitet …": "Preparando vídeos …",
+    "Ziehen und Ablegen ist nicht verfügbar – bitte klicken.": "Arrastrar y soltar no está disponible – haz clic.",
+    "Zurücksetzen": "Restablecer",
+    "Klick-Hilfe": "Ayuda con clic",
+    "Neueste Version (GitHub)": "Última versión (GitHub)",
+    "Mobile Version (MVG Mobil)": "Versión móvil (MVG Móvil)",
+    "📱 Auch fürs Handy: MVG Mobil": "📱 También para el móvil: MVG Móvil",
+    "PDF-Anleitung": "Manual PDF",
+    "Sprache / Language": "Idioma / Language",
+    "Intro: ": "Intro: ",
+    "Intro hierher ziehen (optional)\n(oder klicken zum Auswählen)": "Arrastra aquí una intro (opcional)\n(o haz clic para elegir)",
+    "Intro wählen": "Elegir intro",
+    "Bitte das Programm neu starten.": "Reinicia el programa.",
+    "Videos wählen": "Elegir vídeos",
+    "Rendern läuft noch. Wirklich beenden?": "El renderizado sigue en curso. ¿Salir de todos modos?",
+})
+
+try:
+    from tkinterdnd2 import TkinterDnD, DND_FILES
+    _HAS_DND = True
+except Exception:
+    TkinterDnD = None
+    DND_FILES = None
+    _HAS_DND = False
+
+AUDIO_EXTS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
+VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
+
+
+def open_mode_dialog(first_start: bool = False):
+    """Einfach oder Fortgeschritten. Beim ersten Start im großen Hauptfenster, sonst aus dem ⚙-Menü."""
+    global MODE
+    if first_start:
+        root = _boot_root()
+        box = ctk.CTkFrame(root, fg_color="transparent")
+        box.place(relx=0.5, rely=0.5, anchor="center")
+        wl, bw, bh = 520, 420, 76
+    else:
+        root = ctk.CTkToplevel(app)
+        root.grab_set()
+        root.title(tr("Modus wählen"))
+        w, h = 420, 330
+        try:
+            root.update_idletasks()
+            x = app.winfo_x() + (app.winfo_width() - w) // 2
+            y = app.winfo_y() + (app.winfo_height() - h) // 2
+            root.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
+        except Exception:
+            root.geometry(f"{w}x{h}")
+        root.resizable(False, False)
+        box = root
+        wl, bw, bh = 370, 320, 64
+
+    ctk.CTkLabel(box, text=tr("Wie möchtest du das Programm nutzen?"),
+                 font=ctk.CTkFont(size=22 if first_start else 16, weight="bold"),
+                 wraplength=wl).pack(pady=(22, 16))
+
+    def pick(m):
+        global MODE
+        save_settings({"mode": m})
+        if first_start:
+            MODE = m
+            root.destroy()
+        else:
+            root.destroy()
+            messagebox.showinfo(tr("Modus wählen"), tr("Bitte das Programm neu starten."))
+
+    for m, key in (("simple", "Einfach\nnur Musik und Videos hineinziehen"),
+                   ("advanced", "Fortgeschritten\nalle Einstellungen")):
+        ctk.CTkButton(box, text=tr(key), width=bw, height=bh,
+                      command=lambda mm=m: pick(mm)).pack(pady=7)
+    ctk.CTkLabel(box, text=tr("Der Modus kann jederzeit im ⚙-Menü geändert werden."),
+                 font=ctk.CTkFont(size=11), text_color="gray", wraplength=wl).pack(pady=(12, 0))
+
+    if first_start:
+        def on_close():
+            root.destroy()
+            os._exit(0)
+        root.protocol("WM_DELETE_WINDOW", on_close)
+        root.mainloop()
+
+
+def _split_drop(win, data: str) -> list[str]:
+    try:
+        return list(win.tk.splitlist(data))
+    except Exception:
+        return [data]
+
+
+MOBILE_URL = "https://github.com/loopweb/mvg-mobil"
+RELEASES_URL = "https://github.com/loopweb/musik-video-generator/releases"
+
+
+def _open_url(url: str):
+    import webbrowser
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
+
+def show_settings_menu(widget=None, simple: bool = False):
+    """⚙-Menü: Einstellungen, Hilfe, Updates, Mobile Version."""
+    menu = tk.Menu(app, tearoff=0)
+    menu.add_command(label=tr("Sprache / Language"), command=lambda: open_language_dialog(False))
+    menu.add_command(label=tr("Modus wechseln"), command=lambda: open_mode_dialog(False))
+    menu.add_separator()
+    if not simple:
+        menu.add_command(label=tr("Klick-Hilfe"), command=lambda: start_click_help())
+        menu.add_command(label=tr("Kurzanleitung"), command=open_help)
+    menu.add_command(label=tr("PDF-Anleitung"), command=open_pdf_manual)
+    menu.add_separator()
+    menu.add_command(label=tr("Neueste Version (GitHub)"), command=lambda: _open_url(RELEASES_URL))
+    menu.add_command(label=tr("Mobile Version (MVG Mobil)"), command=lambda: _open_url(MOBILE_URL))
+    try:
+        if widget is not None:
+            x, y = widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height()
+        else:
+            x, y = app.winfo_pointerx(), app.winfo_pointery()
+        menu.tk_popup(x, y)
+    finally:
+        menu.grab_release()
+
+
+def run_simple_mode():
+    """Einfacher Modus im großen Hauptfenster: Musik + Videos (+ optional Intro) hineinziehen, Render."""
+    global app
+
+    app = _boot_root(dnd=True)
+    win = app
+
+    st = {"music": None, "videos": [], "intro": None, "busy": False}
+
+    top = ctk.CTkFrame(win, fg_color="transparent")
+    top.pack(fill="x", padx=30, pady=(22, 0))
+    ctk.CTkLabel(top, text="Musik Video Generator",
+                 font=ctk.CTkFont(size=26, weight="bold")).pack(side="left")
+
+    btn_q = ctk.CTkButton(top, text="⚙", width=40, height=40, command=lambda: show_settings_menu(btn_q, simple=True))
+    btn_q.pack(side="right")
+
+    body = ctk.CTkFrame(win, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=60)
+
+    def make_zone(height):
+        z = ctk.CTkFrame(body, height=height, corner_radius=14, border_width=2,
+                         border_color=("gray60", "gray40"))
+        z.pack(fill="x", pady=(16, 0))
+        z.pack_propagate(False)
+        lbl = ctk.CTkLabel(z, text="", font=ctk.CTkFont(size=16), justify="center")
+        lbl.pack(expand=True)
+        return z, lbl
+
+    def refresh():
+        if st["music"]:
+            music_lbl.configure(text=tr("Musik: ") + Path(st["music"]).name)
+        else:
+            music_lbl.configure(text=tr("Musik hierher ziehen\n(oder klicken zum Auswählen)"))
+        if st["videos"]:
+            vid_lbl.configure(text=tr("Videos: ") + f"{len(st['videos'])}" + tr(" Videos"))
+        else:
+            vid_lbl.configure(text=tr("Videos hierher ziehen\n(oder klicken zum Auswählen)"))
+        if st["intro"]:
+            intro_lbl.configure(text=tr("Intro: ") + Path(st["intro"]).name)
+        else:
+            intro_lbl.configure(text=tr("Intro hierher ziehen (optional)\n(oder klicken zum Auswählen)"))
+        btn_render.configure(state="normal" if (st["music"] and st["videos"] and not st["busy"]) else "disabled")
+
+    def add_files(paths, kind="videos"):
+        for p in paths:
+            pp = Path(str(p).strip("{}"))
+            ext = pp.suffix.lower()
+            if pp.is_dir():
+                add_files([str(c) for c in sorted(pp.iterdir())], kind)
+            elif not pp.is_file():
+                continue
+            elif ext in AUDIO_EXTS:
+                st["music"] = str(pp)
+            elif ext in VIDEO_EXTS:
+                if kind == "intro":
+                    st["intro"] = str(pp)
+                elif str(pp) not in st["videos"]:
+                    st["videos"].append(str(pp))
+        refresh()
+
+    def pick_music():
+        if st["busy"]:
+            return
+        f = filedialog.askopenfilename(title=tr("Musik wählen"),
+                                       filetypes=[("Audio", "*.mp3 *.wav *.flac *.m4a *.ogg *.aac")])
+        if f:
+            add_files([f])
+
+    def pick_videos():
+        if st["busy"]:
+            return
+        fs = filedialog.askopenfilenames(title=tr("Videos wählen"),
+                                         filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm")])
+        if fs:
+            add_files(list(fs), "videos")
+
+    def pick_intro():
+        if st["busy"]:
+            return
+        f = filedialog.askopenfilename(title=tr("Intro wählen"),
+                                       filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm")])
+        if f:
+            add_files([f], "intro")
+
+    zone_m, music_lbl = make_zone(120)
+    zone_i, intro_lbl = make_zone(90)
+    zone_v, vid_lbl = make_zone(120)
+
+    for z, lbl, click, kind in ((zone_m, music_lbl, pick_music, "videos"),
+                                (zone_v, vid_lbl, pick_videos, "videos"),
+                                (zone_i, intro_lbl, pick_intro, "intro")):
+        for wdg in (z, lbl):
+            wdg.bind("<Button-1>", lambda e, c=click: c())
+            try:
+                wdg.configure(cursor="hand2")
+            except Exception:
+                pass
+            if _HAS_DND:
+                try:
+                    wdg.drop_target_register(DND_FILES)
+                    wdg.dnd_bind("<<Drop>>", lambda e, k=kind: (None if st["busy"] else add_files(_split_drop(win, e.data), k)))
+                except Exception:
+                    pass
+
+    status = ctk.CTkLabel(body, text="" if _HAS_DND else tr("Ziehen und Ablegen ist nicht verfügbar – bitte klicken."),
+                          wraplength=700, justify="center")
+    status.pack(pady=(20, 6))
+    bar = ctk.CTkProgressBar(body, width=700)
+    bar.set(0)
+    bar.pack(pady=(0, 12))
+
+    def ui_status(t):
+        status.configure(text=t)
+
+    def ui_progress(p):
+        bar.set(max(0.0, min(1.0, p)))
+
+    def set_busy(b):
+        st["busy"] = b
+        refresh()
+
+    def open_out():
+        try:
+            OUTPUT_DIR.mkdir(exist_ok=True)
+            os.startfile(str(OUTPUT_DIR))
+        except Exception:
+            pass
+
+    def do_simple_render():
+        if st["busy"]:
+            return
+        if not (st["music"] and st["videos"]):
+            ui_status(tr("Bitte zuerst Musik und Videos hinzufügen."))
+            return
+        music = st["music"]
+        vids = list(st["videos"])
+        intro = Path(st["intro"]) if st["intro"] else None
+        set_busy(True)
+        ui_progress(0.0)
+        ui_status(tr("Videos werden vorbereitet …"))
+
+        def worker():
+            try:
+                folder = BASE_DIR / "simple_clips"
+                if folder.exists():
+                    shutil.rmtree(folder, ignore_errors=True)
+                folder.mkdir(parents=True, exist_ok=True)
+                for i, v in enumerate(vids):
+                    dst = folder / f"{i:03d}_{Path(v).name}"
+                    try:
+                        os.link(v, dst)
+                    except Exception:
+                        shutil.copy2(v, dst)
+                empty_photos = BASE_DIR / "simple_photos"
+                empty_photos.mkdir(exist_ok=True)
+
+                OUTPUT_DIR.mkdir(exist_ok=True)
+                jobs = [(k, get_output_path_from_music(music, k)) for k in ("normal", "shorts58")]
+                done, failed = [], []
+                n = len(jobs)
+                for idx, (fmt, fout) in enumerate(jobs):
+                    prefix = f"[{idx + 1}/{n} · {FORMAT_LABELS[fmt]}]  "
+                    try:
+                        render_video(
+                            audio_path=music, clips_folder=folder, photos_folder=empty_photos,
+                            out_path=fout, use_intro=bool(intro and fmt == "normal"),
+                            use_outro=False, use_vorspann=False,
+                            speed="normal", pool_value=0, pool_on=False,
+                            external_clips_on=True, external_photos_on=False,
+                            is_shorts=(fmt != "normal"), shorts_limited=(fmt == "shorts58"),
+                            moods_selected=None, title_overlay=False, title_text="",
+                            status_cb=lambda t, p=prefix: win.after(0, ui_status, p + t),
+                            progress_cb=lambda p, i=idx: win.after(0, ui_progress, (i + p) / n),
+                            persist_segments=False,
+                            intro_override=intro if fmt == "normal" else None,
+                        )
+                        done.append(fout.name)
+                    except Exception as e:
+                        if idx == 0:
+                            raise
+                        failed.append(f"{FORMAT_LABELS[fmt]}: {e}")
+                win.after(0, play_done_sound)
+                msg = tr("Fertig: ") + " + ".join(done)
+                if failed:
+                    msg += tr("  —  Fehler bei ") + "; ".join(failed)
+                win.after(0, ui_status, msg)
+                win.after(0, ui_progress, 1.0)
+                win.after(0, lambda: btn_open.pack(pady=(0, 10)))
+            except Exception as e:
+                win.after(0, ui_status, tr("Fehler: ") + str(e))
+            finally:
+                shutil.rmtree(BASE_DIR / "simple_clips", ignore_errors=True)   # temporäre Kopien aufräumen
+                shutil.rmtree(BASE_DIR / "simple_photos", ignore_errors=True)
+                win.after(0, lambda: set_busy(False))
+
+        btn_open.pack_forget()
+        threading.Thread(target=worker, daemon=True).start()
+
+    btn_render = ctk.CTkButton(body, text="▶  Render", width=700, height=56,
+                               font=ctk.CTkFont(size=18, weight="bold"),
+                               state="disabled", command=do_simple_render)
+    btn_render.pack(pady=(4, 10))
+    btn_open = ctk.CTkButton(body, text=tr("Ordner öffnen"), width=200, command=open_out)
+
+    def reset():
+        if st["busy"]:
+            return
+        st["music"] = None
+        st["videos"] = []
+        st["intro"] = None
+        ui_progress(0.0)
+        ui_status("")
+        btn_open.pack_forget()
+        refresh()
+
+    ctk.CTkButton(body, text=tr("Zurücksetzen"), width=120, fg_color="transparent", border_width=1,
+                  text_color=("gray20", "gray80"), command=reset).pack(pady=(0, 14))
+
+    def on_close():
+        if st["busy"] and not messagebox.askyesno(tr("Beenden"), tr("Rendern läuft noch. Wirklich beenden?")):
+            return
+        win.destroy()
+        os._exit(0)
+
+    win.protocol("WM_DELETE_WINDOW", on_close)
+    refresh()
+    win.mainloop()
+    sys.exit(0)
+
+
+_trace("vor Sprachabfrage")
+_first_start = not LANG
 if not LANG:
     open_language_dialog(first_start=True)
     if not LANG:
         LANG = 'de'
 
-app = ctk.CTk()
-app.title(tr("Musik Video Generator  v2.9"))
+_trace("Sprache ok")
+MODE = load_settings().get("mode", "")
+if MODE not in ("simple", "advanced"):
+    if _first_start:
+        open_mode_dialog(first_start=True)
+    if MODE not in ("simple", "advanced"):
+        MODE = "advanced"          # bestehende Nutzer: gewohntes Fenster
+_trace("Modus: " + MODE)
+if MODE == "simple":
+    run_simple_mode()
+
+app = _boot_root(dnd=False)
+_trace("Hauptfenster erzeugt")
+app.title(tr("Musik Video Generator  v3.0"))
 app.geometry("960x720")
 app.minsize(960, 720)
 
@@ -2125,8 +2614,7 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
 
     update(tr("YouTube-Werkzeug wird geprüft …"))
     deno = _ensure_deno()
-    out_dir = OUTPUT_DIR / "Shorts"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = OUTPUT_DIR / "Shorts"      # wird erst beim Speichern angelegt
 
     def progress(d):
         if d.get("status") == "downloading":
@@ -2157,6 +2645,7 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
         if len(srcs) != 1:
             raise RuntimeError(tr("Die heruntergeladene Videodatei wurde nicht gefunden."))
         start = pick_url_short_start(srcs[0], dur, update)
+        out_dir.mkdir(parents=True, exist_ok=True)
         target = out_dir / f"Short_{info.get('id', 'video')}.mp4"
         render_url_short(srcs[0], target, start, update)
     return target
@@ -2705,7 +3194,7 @@ ctk.CTkLabel(sec_music, textvariable=music_var, wraplength=580, justify="left").
 btn_reset = ctk.CTkButton(sec_music, text=tr("Reset"), width=100, command=on_reset_clicked)
 btn_reset.grid(row=0, column=2, padx=(0, 6), pady=10)
 
-btn_help = ctk.CTkButton(sec_music, text="?", width=36, command=lambda: open_help_menu())
+btn_help = ctk.CTkButton(sec_music, text="⚙", width=36, command=lambda: open_help_menu())
 btn_help.grid(row=0, column=3, padx=(0, 12), pady=10)
 
 # ── Mittlere Zeile: Format | Schnitt | Clip-Pool
@@ -2968,7 +3457,7 @@ def _enter_editor():
     ).grid(row=0, column=2, padx=(0, 6), pady=10)
 
     ctk.CTkButton(
-        sec_top, text="?", width=36, command=lambda: open_help_menu()
+        sec_top, text="⚙", width=36, command=lambda: open_help_menu()
     ).grid(row=0, column=3, padx=(0, 12), pady=10)
 
     # ── Clip-Grid
@@ -3089,7 +3578,7 @@ def _rebuild_main_ui():
         row=0, column=1, sticky="w", padx=8, pady=10)
     btn_reset = ctk.CTkButton(sec_music, text=tr("Reset"), width=100, command=on_reset_clicked)
     btn_reset.grid(row=0, column=2, padx=(0, 6), pady=10)
-    btn_help = ctk.CTkButton(sec_music, text="?", width=36, command=lambda: open_help_menu())
+    btn_help = ctk.CTkButton(sec_music, text="⚙", width=36, command=lambda: open_help_menu())
     btn_help.grid(row=0, column=3, padx=(0, 12), pady=10)
 
     # Mittlere Sektion wiederherstellen — einfach neu initialisieren
@@ -3889,7 +4378,7 @@ HELP_TOPICS = {
 "de": {
  "music": ("Musik wählen", "Hier wählst du die Musikdatei (MP3 oder WAV). Aus dieser Datei entsteht dein Video: Das Programm analysiert den Beat und legt alle Schnitte genau darauf. Die Länge des Videos entspricht der Länge der Musik.\n\nDer Name des fertigen Videos wird aus dem Dateinamen gebildet (z. B. „MeinSong.mp3“ → „MeinSong.mp4“). Auch der Titel, der optional im Video eingeblendet wird, kommt von dort.\n\nOhne Musik kann nicht gerendert werden."),
  "reset": ("Reset", "Setzt alle Einstellungen auf den Anfangszustand zurück: Musik, Formate, Schnitt, Pool, Stimmung und alle Schalter.\n\nIst ein Zwischenspeicher (Cache) vorhanden, fragt das Programm, ob er ebenfalls geleert werden soll. Der Cache beschleunigt wiederholtes Rendern, kann aber Speicherplatz belegen. Deine fertigen Videos im Ordner output/ bleiben immer erhalten.\n\nWährend ein Render läuft, ist Reset gesperrt."),
- "help": ("Hilfe (?)", "Öffnet ein kleines Menü:\n• Klick-Hilfe: Du klickst danach auf einen beliebigen Bereich und bekommst eine ausführliche Erklärung.\n• Kurzanleitung und PDF-Anleitung.\n• Sprache: Deutsch, English oder Español (danach Programm neu starten)."),
+ "help": ("Einstellungen (⚙)", "Öffnet das Einstellungsmenü:\n• Sprache und Modus (Einfach/Fortgeschritten) ändern – danach das Programm neu starten.\n• Hilfe: Klick-Hilfe (Bereich anklicken und ausführlich erklärt bekommen), Kurzanleitung und PDF-Anleitung.\n• Neueste Version: öffnet die Download-Seite auf GitHub.\n• Mobile Version: öffnet die Seite von MVG Mobil für das Handy."),
  "fmt": ("Format", "Hier legst du fest, welche Videoformate erzeugt werden. Du kannst mehrere gleichzeitig wählen – jedes Format wird als eigene Datei im Ordner output/ gespeichert. Mindestens ein Format muss aktiv bleiben.\n\nStandardmäßig sind 16:9 und der 58-Sekunden-Short aktiv. Mehr Formate bedeuten längere Renderzeit."),
  "fmt_normal": ("Normal 16:9", "Das klassische Querformat, ideal für YouTube und Computer-Bildschirme. Das Video hat die volle Länge deiner Musik und kann Pre-Intro, Intro, Outro und Titel enthalten.\n\nDateiname: Musiktitel.mp4\nDies ist das Format, das der Clip-Editor („Clips verschieben“) bearbeitet."),
  "fmt_shorts": ("Normal 9:16", "Hochformat in voller Länge deiner Musik – gedacht für Handy-Wiedergabe, wenn das ganze Lied gezeigt werden soll. Pre-Intro, Intro, Outro und Titel sind möglich.\n\nDateiname: Musiktitel_9x16.mp4"),
@@ -3927,7 +4416,7 @@ HELP_TOPICS = {
 "en": {
  "music": ("Choose music", "Here you choose the music file (MP3 or WAV). Your video is built from it: the program analyzes the beat and places all cuts exactly on it. The video length equals the length of the music.\n\nThe name of the finished video comes from the file name (e.g. “MySong.mp3” → “MySong.mp4”). The optional on-screen title comes from there too.\n\nWithout music nothing can be rendered."),
  "reset": ("Reset", "Sets all settings back to their initial state: music, formats, cutting, pool, mood and all switches.\n\nIf a cache exists, the program asks whether to clear it as well. The cache speeds up repeated renders but can take up disk space. Your finished videos in the output/ folder are always kept.\n\nWhile a render is running, Reset is locked."),
- "help": ("Help (?)", "Opens a small menu:\n• Click help: afterwards you click any area and get a detailed explanation.\n• Quick guide and PDF manual.\n• Language: Deutsch, English or Español (restart the program afterwards)."),
+ "help": ("Settings (⚙)", "Opens the settings menu:\n• Change language and mode (Simple/Advanced) – restart the program afterwards.\n• Help: click help (click an area and get a detailed explanation), quick guide and PDF manual.\n• Latest version: opens the download page on GitHub.\n• Mobile version: opens the MVG Mobile page for your phone."),
  "fmt": ("Format", "Here you decide which video formats are created. You can choose several at once – each format is saved as its own file in the output/ folder. At least one format must stay active.\n\nBy default 16:9 and the 58-second short are active. More formats mean longer rendering."),
  "fmt_normal": ("Normal 16:9", "The classic landscape format, ideal for YouTube and computer screens. The video has the full length of your music and can contain pre-intro, intro, outro and title.\n\nFile name: Title.mp4\nThis is the format the clip editor (“Edit clips”) works on."),
  "fmt_shorts": ("Normal 9:16", "Portrait at the full length of your music – meant for phone playback when the whole song should be shown. Pre-intro, intro, outro and title are possible.\n\nFile name: Title_9x16.mp4"),
@@ -3965,7 +4454,7 @@ HELP_TOPICS = {
 "es": {
  "music": ("Elegir música", "Aquí eliges el archivo de música (MP3 o WAV). Tu vídeo se crea a partir de él: el programa analiza el ritmo y coloca todos los cortes exactamente sobre él. La duración del vídeo es la de la música.\n\nEl nombre del vídeo terminado sale del nombre del archivo (p. ej. «MiCancion.mp3» → «MiCancion.mp4»). El título opcional que se muestra en el vídeo también sale de ahí.\n\nSin música no se puede renderizar."),
  "reset": ("Reiniciar", "Devuelve todos los ajustes al estado inicial: música, formatos, corte, grupo, ánimo y todos los interruptores.\n\nSi hay una caché, el programa pregunta si también debe vaciarse. La caché acelera renderizados repetidos pero puede ocupar espacio. Tus vídeos terminados en la carpeta output/ siempre se conservan.\n\nMientras se renderiza, Reiniciar está bloqueado."),
- "help": ("Ayuda (?)", "Abre un pequeño menú:\n• Ayuda con clic: después haces clic en cualquier zona y recibes una explicación detallada.\n• Guía rápida y manual PDF.\n• Idioma: Deutsch, English o Español (reinicia el programa después)."),
+ "help": ("Ajustes (⚙)", "Abre el menú de ajustes:\n• Cambiar idioma y modo (Sencillo/Avanzado) – reinicia el programa después.\n• Ayuda: ayuda con clic (haz clic en una zona y recibe una explicación detallada), guía rápida y manual PDF.\n• Última versión: abre la página de descargas en GitHub.\n• Versión móvil: abre la página de MVG Móvil para tu teléfono."),
  "fmt": ("Formato", "Aquí decides qué formatos de vídeo se crean. Puedes elegir varios a la vez – cada formato se guarda como archivo propio en la carpeta output/. Al menos un formato debe seguir activo.\n\nPor defecto están activos 16:9 y el short de 58 segundos. Más formatos significan más tiempo de renderizado."),
  "fmt_normal": ("Normal 16:9", "El formato horizontal clásico, ideal para YouTube y pantallas de ordenador. El vídeo dura lo mismo que tu música y puede incluir pre-intro, intro, outro y título.\n\nNombre de archivo: Título.mp4\nEste es el formato que edita el editor de clips («Editar clips»)."),
  "fmt_shorts": ("Normal 9:16", "Vertical con la duración completa de tu música – pensado para verlo en el móvil cuando se quiere mostrar la canción entera. Son posibles pre-intro, intro, outro y título.\n\nNombre de archivo: Título_9x16.mp4"),
@@ -4011,14 +4500,14 @@ MENU = {
 }
 
 
-# --------------------- Klick-Hilfe ("?") ---------------------
+# --------------------- Klick-Hilfe ("⚙") ---------------------
 _click_help = {"active": False}
 
 
 def _help_text_map() -> dict:
     """Beschriftung (in aktueller Sprache) -> Hilfe-Schlüssel."""
     pairs = [
-        ("Musik wählen", "music"), ("Reset", "reset"), ("?", "help"),
+        ("Musik wählen", "music"), ("Reset", "reset"), ("⚙", "help"),
         ("Normal  16:9", "fmt_normal"), ("Normal  9:16", "fmt_shorts"), ("Short  9:16 · 58s", "fmt_short58"),
         ("Format", "fmt"), ("Schnitt", "speed"),
         ("Sanft", "speed"), ("Langsam", "speed"), ("Normal", "speed"), ("Schnell", "speed"), ("Random", "speed"),
@@ -4208,22 +4697,8 @@ def start_click_help():
 
 
 def open_help_menu(btn=None):
-    """Menü des "?"-Buttons: Klick-Hilfe, Kurzanleitung, PDF, Sprache."""
-    L = LANG or "de"
-    M = MENU.get(L, MENU["de"])
-    menu = tk.Menu(app, tearoff=0)
-    menu.add_command(label=M["click"], command=start_click_help)
-    menu.add_separator()
-    menu.add_command(label=M["guide"], command=open_help)
-    menu.add_command(label=M["pdf"], command=open_pdf_manual)
-    menu.add_command(label=M["lang"], command=lambda: open_language_dialog(False))
-    try:
-        b = btn or (btn_help if not in_editor_mode else None)
-        x = (b.winfo_rootx() if b else app.winfo_pointerx())
-        y = (b.winfo_rooty() + b.winfo_height() if b else app.winfo_pointery())
-        menu.tk_popup(x, y)
-    finally:
-        menu.grab_release()
+    """⚙-Menü im Hauptfenster und im Clip-Editor."""
+    show_settings_menu(btn or (btn_help if not in_editor_mode else None), simple=False)
 
 
 app.protocol("WM_DELETE_WINDOW", on_closing)
@@ -4247,4 +4722,5 @@ def _global_release(event):
 
 app.bind("<ButtonRelease-1>", _global_release, add="+")
 
+_trace("mainloop")
 app.mainloop()

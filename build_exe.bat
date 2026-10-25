@@ -1,12 +1,12 @@
 @echo off
 echo.
 echo  ============================================
-echo   Musik Video Generator v2.9 - EXE Build
+echo   Musik Video Generator v3.0 - EXE Build
 echo  ============================================
 echo.
 
 echo  Abhaengigkeiten werden geprueft ...
-py -3.12 -m pip install --upgrade "yt-dlp[default]" pyinstaller
+py -3.12 -m pip install --upgrade "yt-dlp[default]" tkinterdnd2 pyinstaller
 echo.
 
 py -3.12 -m PyInstaller ^
@@ -14,6 +14,7 @@ py -3.12 -m PyInstaller ^
   --onefile ^
   --windowed ^
   --collect-all yt_dlp ^
+  --collect-all tkinterdnd2 ^
   --icon="C:\Projekt\icon.ico" ^
   --name="MVG" ^
   --add-data="C:\Projekt\ffmpeg;ffmpeg" ^
