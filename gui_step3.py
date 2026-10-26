@@ -1869,7 +1869,7 @@ TRANSLATIONS.setdefault("en", {}).update({
     "Videos werden vorbereitet …": "Preparing videos …",
     "Ziehen und Ablegen ist nicht verfügbar – bitte klicken.": "Drag and drop is not available – please click.",
     "Zurücksetzen": "Reset",
-    "Fragen? Oben rechts im ⚙-Menü findest du die Anleitung, die Einstellungen und den Wechsel zur fortgeschrittenen Version mit allen Optionen.": "Questions? Top right in the ⚙ menu you will find the manual, the settings and the switch to the advanced version with all options.",
+    "Hilfe, Anleitung & Fortgeschritten-Modus: ⚙ oben rechts": "Help, manual & advanced mode: ⚙ top right",
     "Klick-Hilfe": "Click help",
     "Neueste Version (GitHub)": "Latest version (GitHub)",
     "Mobile Version (MVG Mobil)": "Mobile version (MVG Mobile)",
@@ -1900,7 +1900,7 @@ TRANSLATIONS.setdefault("es", {}).update({
     "Videos werden vorbereitet …": "Preparando vídeos …",
     "Ziehen und Ablegen ist nicht verfügbar – bitte klicken.": "Arrastrar y soltar no está disponible – haz clic.",
     "Zurücksetzen": "Restablecer",
-    "Fragen? Oben rechts im ⚙-Menü findest du die Anleitung, die Einstellungen und den Wechsel zur fortgeschrittenen Version mit allen Optionen.": "¿Preguntas? Arriba a la derecha, en el menú ⚙, encuentras el manual, los ajustes y el cambio a la versión avanzada con todas las opciones.",
+    "Hilfe, Anleitung & Fortgeschritten-Modus: ⚙ oben rechts": "Ayuda, manual y modo avanzado: ⚙ arriba a la derecha",
     "Klick-Hilfe": "Ayuda con clic",
     "Neueste Version (GitHub)": "Última versión (GitHub)",
     "Mobile Version (MVG Mobil)": "Versión móvil (MVG Móvil)",
@@ -2241,7 +2241,7 @@ def run_simple_mode():
     ctk.CTkButton(body, text=tr("Zurücksetzen"), width=120, fg_color="transparent", border_width=1,
                   text_color=("gray20", "gray80"), command=reset).pack(pady=(0, 14))
 
-    ctk.CTkLabel(body, text=tr("Fragen? Oben rechts im ⚙-Menü findest du die Anleitung, die Einstellungen und den Wechsel zur fortgeschrittenen Version mit allen Optionen."), font=ctk.CTkFont(size=12), text_color="gray",
+    ctk.CTkLabel(body, text=tr("Hilfe, Anleitung & Fortgeschritten-Modus: ⚙ oben rechts"), font=ctk.CTkFont(size=12), text_color="gray",
                  wraplength=700, justify="center").pack(pady=(0, 6))
 
     def on_close():
