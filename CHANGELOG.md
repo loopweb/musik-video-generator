@@ -6,7 +6,7 @@
 
 - **Einfach-Modus:** Beim ersten Start wird nach der Sprache der Modus gewählt (Einfach / Fortgeschritten). Im Einfach-Modus genügt ein schlankes Fenster: Musik, optional ein Intro und die Videos hineinziehen (oder anklicken) und „Render“ drücken. Es entstehen ein 16:9-Video und ein 58-s-Short, ohne internen Pool. Bestehende Nutzer behalten das gewohnte Fenster. Drag & Drop benötigt `tkinterdnd2` (ohne: Klick-Auswahl). Eine Infozeile am Fensterrand verweist auf das ⚙-Menü (Anleitung, Einstellungen, Wechsel zur fortgeschrittenen Version). Die temporären Clip-Kopien (`simple_clips`) werden nach dem Rendern automatisch gelöscht.
 - **Mehrsprachig: Deutsch, English, Español.** Die Sprache wird beim ersten Start gewählt und ist jederzeit im ⚙-Menü änderbar (danach Neustart). Gespeichert in `mvg_settings.json` neben dem Programm.
-- **⚙-Menü (statt „?“):** Sprache und Modus wechseln, Hilfe (Klick-Hilfe, Kurzanleitung, PDF-Anleitung), „Neueste Version (GitHub)“ und „Mobile Version (MVG Mobil)“.
+- **⚙-Menü (statt „?“):** Sprache und Modus wechseln, Hilfe (Klick-Hilfe, Kurzanleitung, PDF-Anleitung), „Neueste Version (GitHub)“ und „Mobile Version – MVG Mobil (GitHub)“.
 - **Klick-Hilfe:** Alle 36 Erklärungen wurden ausführlich neu geschrieben (Deutsch, English, Español), mit Hinweisen auf Stolperstellen, etwa dass der Windows-Ordnerdialog nur Ordner zeigt oder dass „Short per URL“ den Link aus der Zwischenablage liest. Lange Texte erscheinen in einem scrollbaren Fenster. Auf einen beliebigen Knopf oder Bereich klicken und eine ausführliche Erklärung erhalten (36 Themen, drei Sprachen, Hauptfenster und Clip-Editor). Nach einer Erklärung beendet sich der Modus von selbst.
 - **Kurzanleitung** aufgeräumt und ohne Buttons.
 - **Bedienungsanleitung als PDF in drei Sprachen** (`MVG_Bedienungsanleitung.pdf`, `MVG_Manual_EN.pdf`, `MVG_Manual_ES.pdf`) mit neuen Abschnitten „Deinstallation“ und „Die Datei deno.exe“.
@@ -15,6 +15,7 @@
 **Fehlerbehebung**
 
 - Download der Hilfskomponente Deno schlug bei Zertifikatsproblemen fehl (`CERTIFICATE_VERIFY_FAILED`); jetzt mit Rückfallwegen.
+- Einfach-Modus: „PDF-Anleitung“ im ⚙-Menü brach mit einem Fehler ab (`ui_status` nicht definiert); jetzt öffnet sie die PDF bzw. zeigt einen Hinweis.
 - Der Ordner `output/Shorts` bleibt nicht mehr leer zurück, wenn „Short per URL“ scheitert.
 - Startfehler `KeyError: 'Sad'` bei englischer/spanischer Oberfläche behoben.
 - Meldung beim Fehlschlag von „Clip entfernen“ im Editor konnte einen Programmfehler auslösen – behoben.

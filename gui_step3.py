@@ -975,7 +975,11 @@ def open_pdf_manual():
     if pdf.exists():
         open_path_portable(pdf)
     else:
-        ui_status(tr("PDF-Anleitung nicht neben dem Programm gefunden"))
+        msg = tr("PDF-Anleitung nicht neben dem Programm gefunden")
+        try:
+            ui_status(msg)                 # Fortgeschritten-Modus: Statuszeile
+        except NameError:
+            messagebox.showinfo("MVG", msg)   # Einfach-Modus: keine Statuszeile
 
 
 def open_path_portable(p: Path):
@@ -1872,7 +1876,7 @@ TRANSLATIONS.setdefault("en", {}).update({
     "Hilfe, Anleitung & Fortgeschritten-Modus: ⚙ oben rechts": "Help, manual & advanced mode: ⚙ top right",
     "Klick-Hilfe": "Click help",
     "Neueste Version (GitHub)": "Latest version (GitHub)",
-    "Mobile Version (MVG Mobil)": "Mobile version (MVG Mobile)",
+    "Mobile Version – MVG Mobil (GitHub)": "Mobile version – MVG Mobile (GitHub)",
     "📱 Auch fürs Handy: MVG Mobil": "📱 Also for your phone: MVG Mobile",
     "PDF-Anleitung": "PDF manual",
     "Sprache / Language": "Language / Sprache",
@@ -1903,7 +1907,7 @@ TRANSLATIONS.setdefault("es", {}).update({
     "Hilfe, Anleitung & Fortgeschritten-Modus: ⚙ oben rechts": "Ayuda, manual y modo avanzado: ⚙ arriba a la derecha",
     "Klick-Hilfe": "Ayuda con clic",
     "Neueste Version (GitHub)": "Última versión (GitHub)",
-    "Mobile Version (MVG Mobil)": "Versión móvil (MVG Móvil)",
+    "Mobile Version – MVG Mobil (GitHub)": "Versión móvil – MVG Móvil (GitHub)",
     "📱 Auch fürs Handy: MVG Mobil": "📱 También para el móvil: MVG Móvil",
     "PDF-Anleitung": "Manual PDF",
     "Sprache / Language": "Idioma / Language",
@@ -2011,7 +2015,7 @@ def show_settings_menu(widget=None, simple: bool = False):
     menu.add_command(label=tr("PDF-Anleitung"), command=open_pdf_manual)
     menu.add_separator()
     menu.add_command(label=tr("Neueste Version (GitHub)"), command=lambda: _open_url(RELEASES_URL))
-    menu.add_command(label=tr("Mobile Version (MVG Mobil)"), command=lambda: _open_url(MOBILE_URL))
+    menu.add_command(label=tr("Mobile Version – MVG Mobil (GitHub)"), command=lambda: _open_url(MOBILE_URL))
     try:
         if widget is not None:
             x, y = widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height()
