@@ -1,205 +1,192 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Musik Video Generator</title>
-  <meta name="description" content="Musik Video Generator 4.0 – Musikvideos in fünf Schritten: Musik wählen, Clips und Fotos auswählen, die Schnitte landen automatisch auf dem Beat. Mit YouTube-Thumbnail und Short." />
-  <link rel="stylesheet" href="style.css" />
+  <meta name="description" content="Musik Video Generator 4.0 für Windows: Song wählen, Clips und Fotos dazu – die Schnitte landen automatisch auf dem Beat. Kostenlos, mit YouTube-Thumbnail und Short.">
+  <link rel="icon" href="assets/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="hero">
-    <nav class="nav">
-      <div class="brand">
-        <span class="logo">▶</span>
-        <span>Musik Video Generator</span>
-      </div>
-      <a class="nav-link" href="https://loopweb.github.io/mvg-mobil/">Mobile Version</a>
+  <header class="top">
+    <a class="brand" href="#">
+      <img src="assets/icon.png" alt="" width="32" height="32">
+      <span>Musik Video Generator</span>
+    </a>
+    <nav class="top-links" aria-label="Seitenmenü">
+      <a href="#ablauf">So geht's</a>
+      <a href="#beispiel">Beispiel</a>
+      <a href="#funktionen">Funktionen</a>
+      <a href="https://loopweb.github.io/mvg-mobil/">Mobile Version</a>
+      <a class="btn small" href="#download">Download</a>
     </nav>
-
-    <div class="hero-grid">
-      <section class="hero-text">
-        <p class="kicker">Open Source · Version 4.0</p>
-        <h1>Simply cut to the beat.</h1>
-        <p class="lead">
-          In fünf Schritten vom Song zum Musikvideo: Musik wählen, Clips und Fotos auswählen –
-          die Schnitte landen automatisch auf dem Beat. Als 16:9-Video, im 9:16-Hochformat
-          und als 58-Sekunden-Short, auf Wunsch alles in einem Durchgang.
-        </p>
-        <div class="actions">
-          <a class="button primary" href="#download">Download starten</a>
-          <a class="button secondary" href="#screenshots">Screenshots ansehen</a>
-        </div>
-        <p class="small-note">Deutsch · English · Español – Hell- und Dunkelmodus</p>
-      </section>
-
-      <figure class="hero-card">
-        <img src="assets/screenshot-clipfolge.jpg" alt="Schritt 4: die geplante Clipfolge als Kacheln" />
-      </figure>
-    </div>
   </header>
 
   <main>
-    <section class="section">
-      <div class="section-head">
-        <p class="kicker">Kurzbeschreibung</p>
-        <h2>Vom Song zum fertigen Video</h2>
+    <section class="hero">
+      <div class="hero-text">
+        <h1>Simply cut to the beat.</h1>
+        <p class="lead">Du bringst den Song und deine Clips mit. Der Musik Video Generator hört sich die Musik an und setzt jeden Schnitt genau auf den Beat – in fünf Schritten zum fertigen Video.</p>
+        <div class="hero-actions">
+          <a class="btn" href="#download">Kostenlos herunterladen</a>
+          <span class="hero-meta">Windows 10 und 11, Version 4.0</span>
+        </div>
       </div>
-      <p class="text-block">
-        Der Musik Video Generator führt dich Schritt für Schritt zum Video. Du wählst eine Musikdatei
-        und die gewünschten Formate, sammelst Clips und Fotos – aus deinem Clip-Pool, aus beliebigen
-        Ordnern oder einfach per Ziehen ins Fenster – und legst fest, ob Pre-Intro, Intro, Outro und
-        Titel dazukommen. Bevor gerendert wird, siehst du die geplante Clipfolge und kannst Clips
-        verschieben oder austauschen. Während des Renderns läuft ein Band mit den Abschnitten durchs
-        Bild. Am Ende wartet dein Video – samt fertigem YouTube-Thumbnail.
-      </p>
 
-      <div class="features steps">
-        <article>
-          <span class="step-no">1</span>
-          <h3>Start</h3>
-          <p>Musikdatei wählen oder ins Fenster ziehen, Formate ankreuzen: 16:9, 9:16 und/oder Short.</p>
-        </article>
-        <article>
-          <span class="step-no">2</span>
-          <h3>Bildmaterial</h3>
-          <p>Clips und Fotos aus dem Pool, aus Ordnern oder per Drag &amp; Drop – alles in einer gemeinsamen Auswahl.</p>
-        </article>
-        <article>
-          <span class="step-no">3</span>
-          <h3>Extras</h3>
-          <p>Optional Pre-Intro, Intro, Outro und Titel – dazu das passende Schnitttempo.</p>
-        </article>
-        <article>
-          <span class="step-no">4</span>
-          <h3>Schnitt</h3>
-          <p>Die Clipfolge prüfen, Clips verschieben oder zufällig tauschen – dann „Video erstellen“.</p>
-        </article>
-        <article>
-          <span class="step-no">5</span>
-          <h3>Fertig</h3>
-          <p>Video ansehen, Thumbnail ist schon gespeichert, Clips bei Bedarf nachträglich ändern.</p>
-        </article>
+      <!-- Das Markenzeichen der Seite: eine Spur, auf der die Clips auf den Beat einrasten -->
+      <figure class="track" aria-label="Schematische Darstellung: Clips rasten auf den Beats der Musik ein">
+        <div class="track-head">
+          <span class="track-song">Mein Song.mp3</span>
+          <span class="track-time">0:00 – 0:40</span>
+        </div>
+        <div class="track-clips" id="clips"></div>
+        <div class="track-wave" id="wave" aria-hidden="true"></div>
+        <figcaption>Jeder Strich ist ein Beat. Jeder Clip beginnt und endet auf einem.</figcaption>
+      </figure>
+    </section>
+
+    <section class="example" id="beispiel">
+      <h2>Ein Video, komplett mit MVG geschnitten</h2>
+      <div class="video" id="video">
+        <button class="video-start" type="button" aria-label="Beispielvideo abspielen (lädt YouTube)">
+          <span class="video-play" aria-hidden="true"></span>
+          <span class="video-label">Beispielvideo abspielen</span>
+          <span class="video-note">Beim Abspielen wird das Video von YouTube geladen.</span>
+        </button>
       </div>
     </section>
 
-    <section class="section">
-      <div class="section-head">
-        <p class="kicker">Funktionen</p>
-        <h2>Was der Musik Video Generator kann</h2>
-      </div>
-      <div class="features three">
-        <article>
-          <h3>Schnitte auf dem Beat</h3>
-          <p>Die Musik wird analysiert, jeder Schnitt landet automatisch auf dem Beat – sanft bis schnell oder zufällig gemischt.</p>
-        </article>
-        <article>
-          <h3>Mehrere Formate</h3>
-          <p>16:9, 9:16 und 58-Sekunden-Short in einem Durchgang. Der Short nimmt automatisch den stärksten Abschnitt des Songs.</p>
-        </article>
-        <article>
-          <h3>Clip-Pool mit Kategorien</h3>
-          <p>Ein Ordner für Clips, die du immer wieder nutzt. Unterordner werden zu Reitern im Auswahlfenster – ganz ohne Einstellungen.</p>
-        </article>
-        <article>
-          <h3>Clipfolge vor dem Rendern</h3>
-          <p>Jeder Abschnitt als Kachel: per Ziehen verschieben oder durch einen anderen Clip gleicher Länge ersetzen.</p>
-        </article>
-        <article>
-          <h3>Nachträglich ändern</h3>
-          <p>Nach dem Rendern Clips tauschen – gerendert wird nur, was sich geändert hat. Das geht deutlich schneller.</p>
-        </article>
-        <article>
-          <h3>Ganzer Clip</h3>
-          <p>Keine Schnittlänge gewählt? Dann läuft jeder Clip komplett – geschnitten wird am Clip-Ende, genau auf dem Beat.</p>
-        </article>
-        <article>
-          <h3>Loop aus einem Clip</h3>
-          <p>Nur ein Clip ausgewählt? Er läuft automatisch als nahtloser Loop oder Boomerang durch den ganzen Song – im Takt.</p>
-        </article>
-        <article>
-          <h3>Thumbnail-Generator</h3>
-          <p>Automatisch ein YouTube-Thumbnail in 1280×720 – und auf Wunsch mit Text, Schriften, Farben, Logo und eigener Vorlage.</p>
-        </article>
-        <article>
-          <h3>Drei Sprachen, hell &amp; dunkel</h3>
-          <p>Deutsch, English und Español – jederzeit umschaltbar. Dazu Hell- und Dunkelmodus und eine Klick-Hilfe für jeden Bereich.</p>
-        </article>
-      </div>
+    <section class="steps" id="ablauf">
+      <h2>So geht's</h2>
+
+      <article class="step">
+        <div class="step-mark"><span class="step-no">1</span><span class="step-name">Start</span></div>
+        <div class="step-text">
+          <h3>Dein Song gibt den Takt vor</h3>
+          <p>Musikdatei wählen oder einfach ins Fenster ziehen. Dazu die Formate: das klassische 16:9-Video, das Hochformat 9:16 und den 58-Sekunden-Short – gern alle auf einmal.</p>
+        </div>
+        <img class="shot" src="assets/shot-start.jpg" alt="Schritt 1: Musikdatei und Ausgabeformate" loading="lazy">
+      </article>
+
+      <article class="step">
+        <div class="step-mark"><span class="step-no">2</span><span class="step-name">Bildmaterial</span></div>
+        <div class="step-text">
+          <h3>Clips und Fotos sammeln</h3>
+          <p>Aus deinem Clip-Pool, aus beliebigen Ordnern oder per Ziehen ins Fenster. Alles landet in einer gemeinsamen Auswahl. Nur ein Clip dabei? Dann wird daraus ein Loop im Takt.</p>
+        </div>
+        <img class="shot" src="assets/shot-material.jpg" alt="Schritt 2: Quellen und gemeinsame Auswahl" loading="lazy">
+      </article>
+
+      <article class="step">
+        <div class="step-mark"><span class="step-no">3</span><span class="step-name">Extras</span></div>
+        <div class="step-text">
+          <h3>Intro, Outro, Tempo</h3>
+          <p>Optional ein Pre-Intro, Intro, Outro und der Songtitel. Die Schnittgeschwindigkeit reicht von sanft bis schnell – oder du lässt jeden Clip ganz durchlaufen.</p>
+        </div>
+        <img class="shot" src="assets/shot-extras.jpg" alt="Schritt 3: Extras und Schnittgeschwindigkeit" loading="lazy">
+      </article>
+
+      <article class="step">
+        <div class="step-mark"><span class="step-no">4</span><span class="step-name">Schnitt</span></div>
+        <div class="step-text">
+          <h3>Erst ansehen, dann rendern</h3>
+          <p>Die geplante Clipfolge erscheint als Kacheln. Verschieben, tauschen, fertig. Beim Rendern siehst du live, welcher Abschnitt gerade entsteht – und wie lange es noch dauert.</p>
+        </div>
+        <img class="shot" src="assets/shot-schnitt.jpg" alt="Schritt 4: die geplante Clipfolge" loading="lazy">
+      </article>
+
+      <article class="step">
+        <div class="step-mark"><span class="step-no">5</span><span class="step-name">Fertig</span></div>
+        <div class="step-text">
+          <h3>Video samt Thumbnail</h3>
+          <p>Das YouTube-Thumbnail liegt schon im Output-Ordner. Wer mag, gestaltet es im Editor mit Text, Schrift, Farben und eigenem Logo. Einzelne Clips lassen sich nachträglich ändern.</p>
+        </div>
+        <img class="shot" src="assets/shot-thumbnail.jpg" alt="Thumbnail-Editor mit Vorschau und Werkzeugen" loading="lazy">
+      </article>
     </section>
 
-    <section class="section dark" id="screenshots">
-      <div class="section-head">
-        <p class="kicker">Einblicke</p>
-        <h2>Screenshots</h2>
-      </div>
-      <div class="screenshots">
-        <figure>
-          <img src="assets/screenshot-start.jpg" alt="Schritt 1: Musik und Formate wählen" />
-          <figcaption>Schritt 1 – Musik wählen und Formate festlegen.</figcaption>
-        </figure>
-        <figure>
-          <img src="assets/screenshot-bildmaterial.jpg" alt="Schritt 2: Bildmaterial aus Pool, Ordnern oder per Drag and Drop" />
-          <figcaption>Schritt 2 – Clips und Fotos aus jeder Quelle.</figcaption>
-        </figure>
-        <figure>
-          <img src="assets/screenshot-extras.jpg" alt="Schritt 3: Extras und Schnittgeschwindigkeit" />
-          <figcaption>Schritt 3 – Extras und Schnittgeschwindigkeit.</figcaption>
-        </figure>
-        <figure>
-          <img src="assets/screenshot-clipfolge.jpg" alt="Schritt 4: geplante Clipfolge als Kacheln" />
-          <figcaption>Schritt 4 – Schnitt: Clipfolge vor dem Rendern anpassen.</figcaption>
-        </figure>
-        <figure>
-          <img src="assets/screenshot-rendern.jpg" alt="Live-Ansicht beim Rendern mit Laufband" />
-          <figcaption>Live beim Rendern – das Laufband zeigt jeden Abschnitt.</figcaption>
-        </figure>
-        <figure>
-          <img src="assets/screenshot-fertig.jpg" alt="Schritt 5: Fertig-Seite mit Thumbnail-Generator" />
-          <figcaption>Schritt 5 – fertiges Video samt YouTube-Thumbnail.</figcaption>
-        </figure>
-      </div>
+    <section class="features" id="funktionen">
+      <h2>Was sonst noch drin ist</h2>
+      <dl class="feature-list">
+        <div><dt>Schnitte auf dem Beat</dt><dd>Die Musik wird analysiert, jeder Schnitt sitzt im Takt – von sanft bis schnell oder zufällig gemischt.</dd></div>
+        <div><dt>Drei Formate in einem Rutsch</dt><dd>16:9, 9:16 und der 58-Sekunden-Short, der automatisch den stärksten Teil des Songs nimmt.</dd></div>
+        <div><dt>Loop aus einem Clip</dt><dd>Ein einziger Clip läuft nahtlos oder als Boomerang durch den ganzen Song.</dd></div>
+        <div><dt>Nur Geändertes neu rendern</dt><dd>Clips nach dem Rendern tauschen – berechnet wird nur, was sich geändert hat.</dd></div>
+        <div><dt>Short aus einem YouTube-Link</dt><dd>Link kopieren, Menüpunkt wählen: ein 45-Sekunden-Short im Hochformat aus dem stärksten Abschnitt.</dd></div>
+        <div><dt>Deutsch, English, Español</dt><dd>Sprache jederzeit umschaltbar, hell oder dunkel, und zu jedem Bereich eine Erklärung per Klick.</dd></div>
+      </dl>
     </section>
 
-<section class="section cta" id="download">
-  <div class="download-card">
-    <p class="kicker">Windows Download</p>
-    <h2>Musik Video Generator 4.0</h2>
-
-    <p class="download-text">
-      Lade die neueste Version von GitHub herunter und erstelle deine eigenen Musikvideos.
-      Die Bedienungsanleitung liegt als PDF in Deutsch, English und Español bei.
-    </p>
-
-    <div class="download-meta">
-      <span>Windows 10 / 11</span>
-      <span>ZIP-Datei</span>
-      <span>Portable Version</span>
-    </div>
-
-    <a class="button primary download-button"
-       href="https://github.com/loopweb/musik-video-generator/releases" target="_blank" rel="noopener">
-      Musik Video Generator herunterladen
-    </a>
-
-    <p class="download-note">
-      Kostenlos nutzbar für private und kreative Projekte.<br>
-      Die Nutzung erfolgt auf eigene Verantwortung.<br><br>
-      Das Programm wird ohne Clips ausgeliefert – deine eigenen Videos legst du in den Ordner <code>clips/</code>.<br><br>
-      Die Anwendung wurde mit Python/PyInstaller erstellt.
-      Dadurch können vereinzelt Fehlmeldungen durch Antivirenprogramme entstehen.
-    </p>
-  </div>
-</section>
+    <section class="download" id="download">
+      <div class="download-main">
+        <h2>Musik Video Generator 4.0</h2>
+        <p>Kostenlos und ohne Installation: ZIP herunterladen, entpacken, <code>MVG.exe</code> starten. Die Anleitung in Deutsch, English und Español ist eingebaut.</p>
+        <a class="btn big" href="https://github.com/loopweb/musik-video-generator/releases/latest" target="_blank" rel="noopener">Download von GitHub</a>
+      </div>
+      <ul class="download-facts">
+        <li><strong>System</strong>Windows 10 oder 11</li>
+        <li><strong>Clips</strong>bringst du selbst mit – sie gehören in den Ordner <code>clips/</code></li>
+        <li><strong>Updates</strong>meldet das Programm von selbst</li>
+        <li><strong>Hinweis</strong>Manche Virenscanner melden mit Python gebaute Programme fälschlich. MVG ist Open Source, der Code liegt auf GitHub.</li>
+      </ul>
+    </section>
   </main>
 
-  <footer>
-    <p>© 2026 Michael Beyer (loopweb) · MIT-Lizenz</p>
-    <div class="footer-links">
+  <footer class="foot">
+    <p>© 2026 Michael Beyer (loopweb), MIT-Lizenz</p>
+    <nav aria-label="Weitere Links">
       <a href="https://github.com/loopweb/musik-video-generator" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/loopweb/musik-video-generator/issues" target="_blank" rel="noopener">Fehler melden</a>
       <a href="https://www.paypal.com/paypalme/loopweb" target="_blank" rel="noopener">☕ MVG unterstützen</a>
-    </div>
+    </nav>
   </footer>
+
+  <script>
+  // Spur im Kopfbereich: Wellenform, Beat-Striche und Clips, die beim Laden auf die Beats fallen.
+  (function () {
+    var wave = document.getElementById('wave'), clips = document.getElementById('clips');
+    var BEATS = 32, BARS = 160, seed = 7;
+    function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    for (var i = 0; i < BARS; i++) {
+      var b = document.createElement('span');
+      var beatPos = (i / BARS) * BEATS, near = Math.abs(beatPos - Math.round(beatPos));
+      var h = 18 + rnd() * 34 + (near < 0.08 ? 40 : 0);
+      b.style.height = Math.min(100, h) + '%';
+      wave.appendChild(b);
+    }
+    for (var k = 0; k <= BEATS; k++) {
+      var t = document.createElement('i');
+      t.style.left = (k / BEATS * 100) + '%';
+      wave.appendChild(t);
+    }
+    // Clips: Längen in Beats, Bilder aus assets/clip-N.jpg
+    var lens = [4, 2, 3, 2, 4, 1, 3, 2, 3, 4, 2, 2], pos = 0;
+    lens.forEach(function (n, idx) {
+      var c = document.createElement('span');
+      c.className = 'clip';
+      c.style.left = (pos / BEATS * 100) + '%';
+      c.style.width = (n / BEATS * 100) + '%';
+      c.style.backgroundImage = 'url(assets/clip-' + ([1,3,2,5,10,4,6,9,7,8][idx % 10]) + '.jpg)';
+      c.style.animationDelay = (0.25 + idx * 0.09) + 's';
+      clips.appendChild(c);
+      pos += n;
+    });
+  })();
+  // Beispielvideo erst nach Klick von YouTube laden (ohne Cookies)
+  document.querySelector('.video-start').addEventListener('click', function () {
+    var f = document.createElement('iframe');
+    f.src = 'https://www.youtube-nocookie.com/embed/ngCTQfzpJv8?autoplay=1&rel=0';
+    f.title = 'Beispielvideo';
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    f.allowFullscreen = true;
+    var box = document.getElementById('video');
+    box.innerHTML = '';
+    box.appendChild(f);
+  });
+  </script>
 </body>
 </html>
