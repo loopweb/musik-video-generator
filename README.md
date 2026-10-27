@@ -24,7 +24,7 @@ Fertige Windows-EXE (portable, kein Python nötig):
 | **4 Schnitt** | Die geplante Clipfolge wird als Kacheln gezeigt: Clips verschieben oder zufällig tauschen, dann „Video erstellen“. Ein Laufband zeigt live, welcher Abschnitt gerade entsteht |
 | **5 Fertig** | Video im Standard-Player ansehen, YouTube-Thumbnail (1280×720) wird automatisch gespeichert, Clips nachträglich ändern, YouTube-Upload öffnen |
 
-![Schritt 4 – Schnitt](screenshots/4_clipfolge.png)
+![Schritt 4 – Rendern mit Live-Ansicht](screenshots/4_rendern.png)
 
 ## Funktionen
 
@@ -53,9 +53,9 @@ Fertige Windows-EXE (portable, kein Python nötig):
 | | |
 |---|---|
 | ![Start](screenshots/1_start.png) | ![Bildmaterial](screenshots/2_bildmaterial.png) |
-| ![Extras](screenshots/3_extras.png) | ![Rendern](screenshots/4_rendern.png) |
-| ![Fertig](screenshots/5_fertig.png) | ![Sprachauswahl](screenshots/sprachauswahl.png) |
-| ![Loop aus einem Clip](screenshots/4_loop.png) | ![Thumbnail bearbeiten](screenshots/5_thumbnail_bearbeiten.png) |
+| ![Extras](screenshots/3_extras.png) | ![Schnitt](screenshots/4_clipfolge.png) |
+| ![Rendern](screenshots/4_rendern.png) | ![Loop aus einem Clip](screenshots/4_loop.png) |
+| ![Fertig](screenshots/5_fertig.png) | ![Thumbnail bearbeiten](screenshots/5_thumbnail_bearbeiten.png) |
 
 ## Installation & Nutzung
 
