@@ -43,7 +43,7 @@ Fertige Windows-EXE (portable, kein Python nötig):
 - **Drei Sprachen** – Deutsch, English, Español; Wechsel jederzeit ohne Neustart
 - **Hell / Dunkel / System** – Darstellung im ⚙-Menü
 - **Klick-Hilfe** – „?“ drücken, auf einen Bereich klicken, ausführliche Erklärung lesen (drei Sprachen)
-- **Short per URL** – YouTube-Link aus der Zwischenablage → 45-s-Short (9:16) mit stärkstem Abschnitt
+- **Short per URL** – YouTube-Link aus der Zwischenablage → 45-s-Short (9:16) mit stärkstem Abschnitt, Fortschrittsfenster mit allen Schritten
 - **Komfort** – Restzeit beim Rendern, weiches Ende ohne Outro, Dateiauswahl merkt sich die letzten Ordner
 - **Update-Hinweis** – MVG zeigt oben an, wenn auf GitHub eine neue Version bereitsteht
 - **Mobile Version** – [MVG Mobil](https://github.com/loopweb/mvg-mobil) für unterwegs (iPhone, Safari)

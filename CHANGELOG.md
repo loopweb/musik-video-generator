@@ -34,6 +34,7 @@ Die Bedienung wurde komplett neu aufgebaut. Statt eines großen Fensters mit vie
 - **Weiches Ende:** Ohne Outro blenden Bild und Ton in der letzten Sekunde aus, statt hart abzubrechen.
 - **Ordner merken:** Die Dateiauswahl für Musik, Videos und Fotos öffnet sich im zuletzt benutzten Ordner.
 - **Klick-Hilfe in Unterfenstern:** Thumbnail-Editor und Pool-Fenster haben einen eigenen „?“-Button.
+- **Short per URL mit Fortschrittsfenster:** zeigt sofort Link, Videotitel und alle Arbeitsschritte mit Balken; am Ende Dateiname und „Ordner öffnen“, bei Fehlern die Ursache im selben Fenster. Ungültige Links werden sofort gemeldet. Das Fenster kann geschlossen werden, der Short entsteht im Hintergrund weiter.
 
 **Entfernt**
 

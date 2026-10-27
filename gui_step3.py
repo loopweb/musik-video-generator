@@ -2139,7 +2139,7 @@ def _ensure_deno() -> Optional[Path]:
     return target
 
 
-def render_url_short(source: Path, target: Path, start: float, update: Callable[[str], None]) -> None:
+def render_url_short(source: Path, target: Path, start: float, update: Callable[..., None]) -> None:
     """45 s im 9:16-Format mit Originalton aus der Quelldatei."""
     fs, fd = compute_fade(URL_SHORT_SEC)
     fin = SHORTS_FADE_IN_SEC
@@ -2150,16 +2150,16 @@ def render_url_short(source: Path, target: Path, start: float, update: Callable[
            "-t", str(URL_SHORT_SEC), "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf, "-af", af,
            "-r", "30", "-c:v", "libx264", "-preset", "fast", "-crf", "20",
            "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(target)]
-    update(tr("Short wird erstellt …"))
+    update(tr("Short wird erstellt …"), stage="render")
     run_hidden(cmd)
 
 
-def pick_url_short_start(source: Path, duration: float, update: Callable[[str], None]) -> float:
+def pick_url_short_start(source: Path, duration: float, update: Callable[..., None]) -> float:
     """Stärksten Abschnitt im Ton suchen; sonst die Mitte des Videos."""
     fallback = max(0.0, (duration - URL_SHORT_SEC) / 2)
     if duration > 1800:
         return fallback
-    update(tr("Musik wird analysiert …"))
+    update(tr("Musik wird analysiert …"), stage="music")
     wav = Path(tempfile.gettempdir()) / f"mvg_urlshort_{os.getpid()}.wav"
     try:
         subprocess.run([ffmpeg_cmd(), "-y", "-v", "error", "-i", str(source), "-vn",
@@ -2176,7 +2176,7 @@ def pick_url_short_start(source: Path, duration: float, update: Callable[[str], 
             pass
 
 
-def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
+def generate_short_from_url(url: str, update: Callable[..., None]) -> Path:
     from urllib.parse import urlsplit
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or parsed.hostname not in YT_HOSTS:
@@ -2186,7 +2186,7 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
     except ImportError:
         raise RuntimeError(tr("yt-dlp ist nicht installiert (pip install yt-dlp)."))
 
-    update(tr("YouTube-Werkzeug wird geprüft …"))
+    update(tr("YouTube-Werkzeug wird geprüft …"), stage="tool")
     deno = _ensure_deno()
     out_dir = OUTPUT_DIR / "Shorts"      # wird erst beim Speichern angelegt
 
@@ -2194,7 +2194,7 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
         if d.get("status") == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate")
             pct = f" {int(d.get('downloaded_bytes', 0) * 100 / total)}%" if total else ""
-            update(tr("Video wird geladen …") + pct)
+            update(tr("Video wird geladen …") + pct, stage="load", frac=(d.get("downloaded_bytes", 0) / total) if total else None)
 
     with tempfile.TemporaryDirectory(prefix="mvg-short-") as tmp:
         opts = {"noplaylist": True, "quiet": True, "no_warnings": True,
@@ -2206,7 +2206,7 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
             opts["ffmpeg_location"] = str(ff.parent)
         if deno:
             opts["js_runtimes"] = {"deno": {"path": str(deno)}}
-        update(tr("Video wird geprüft …"))
+        update(tr("Video wird geprüft …"), stage="check")
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             if info.get("is_live") or info.get("_type") == "playlist":
@@ -2214,14 +2214,19 @@ def generate_short_from_url(url: str, update: Callable[[str], None]) -> Path:
             dur = float(info.get("duration") or 0)
             if dur < URL_SHORT_SEC:
                 raise ValueError(tr("Das Video muss mindestens {n} Sekunden lang sein.").format(n=URL_SHORT_SEC))
+            update(str(info.get("title") or ""), stage="title")
             ydl.download([url])
         srcs = [q for q in Path(tmp).iterdir() if q.suffix.lower() in (".mp4", ".webm", ".mkv", ".mov")]
         if len(srcs) != 1:
             raise RuntimeError(tr("Die heruntergeladene Videodatei wurde nicht gefunden."))
         start = pick_url_short_start(srcs[0], dur, update)
-        out_dir.mkdir(parents=True, exist_ok=True)
         target = out_dir / f"Short_{info.get('id', 'video')}.mp4"
-        render_url_short(srcs[0], target, start, update)
+        tmp_target = Path(tmp) / target.name
+        render_url_short(srcs[0], tmp_target, start, update)
+        if not tmp_target.exists() or tmp_target.stat().st_size < 1000:
+            raise RuntimeError(tr("Der Short konnte nicht erstellt werden."))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(tmp_target), str(target))
     return target
 
 
@@ -2371,7 +2376,7 @@ _ICON_ICO_B64 = (
 
 
 # =====================================================================================
-#                                   GUI  v4.0
+#                                   GUI
 #   Assistent in 4 Schritten: Start · Bildmaterial · Extras · Fertig (Clip-Editor)
 # =====================================================================================
 APPEARANCE_MODES = {"system": "System", "light": "Light", "dark": "Dark"}
@@ -6590,8 +6595,8 @@ def show_settings_menu(widget=None):
     menu.add_command(label=tr("Kurzanleitung"), command=open_help)
     menu.add_command(label=tr("PDF-Anleitung"), command=open_pdf_manual)
     menu.add_separator()
-    menu.add_command(label=tr("Short per URL (Zwischenablage)"), command=on_short_url_click,
-                     state="disabled" if _url_short_busy else "normal")
+    menu.add_command(label=tr("Short per URL (Zwischenablage)") + ("  …" if _url_short_busy else ""),
+                     command=on_short_url_click)
     menu.add_command(label=tr("Pool-Ordner öffnen"), command=lambda: open_path_portable(POOL_DIR))
     menu.add_command(label=tr("Output-Ordner"), command=open_output_folder)
     menu.add_separator()
@@ -6942,10 +6947,23 @@ def on_reset_clicked():
 
 
 # ===================== Short per URL =====================
+_url_short_state: dict = {"win": None, "model": None, "url": "", "title": "", "result": None, "error": None}
+
+
+def _valid_youtube_url(url: str) -> bool:
+    from urllib.parse import urlsplit
+    try:
+        p_ = urlsplit(url)
+        return p_.scheme in ("http", "https") and p_.hostname in YT_HOSTS
+    except Exception:
+        return False
+
+
 def on_short_url_click():
-    """YouTube-Link aus der Zwischenablage -> 45-s-Short (9:16) in output/Shorts."""
+    """YouTube-Link aus der Zwischenablage -> 45-s-Short (9:16) in output/Shorts, mit Fortschrittsfenster."""
     global _url_short_busy
-    if _url_short_busy:
+    if _url_short_busy:                      # läuft schon: Fenster wieder zeigen
+        open_url_short_window()
         return
     try:
         url = app.clipboard_get().strip()
@@ -6954,26 +6972,157 @@ def on_short_url_click():
     if not url:
         messagebox.showinfo(tr("Short per URL"), tr("Zwischenablage leer – bitte zuerst einen YouTube-Link kopieren"))
         return
+    if not _valid_youtube_url(url):
+        messagebox.showinfo(tr("Short per URL"), tr("In der Zwischenablage ist kein gültiger YouTube-Link.") + "\n\n" +
+                            tr("Kopiere den Link eines YouTube-Videos (z. B. aus der Adresszeile des Browsers) und wähle dann noch einmal „Short per URL“."))
+        return
     _url_short_busy = True
+    rows = [_prog_row("link", "Link prüfen"), _prog_row("tool", "YouTube-Werkzeug vorbereiten"),
+            _prog_row("check", "Video-Infos abrufen"), _prog_row("load", "Video laden"),
+            _prog_row("music", "Stärksten Abschnitt suchen"), _prog_row("render", "Short erstellen (45 s · 9:16)")]
+    model = {"rows": rows, "complete": False, "fired": True, "on_complete": None}
+    _url_short_state.update({"model": model, "url": url, "title": "", "result": None, "error": None})
+    _prog_start(model, "link")
+    open_url_short_window()
 
-    def upd(t: str):
-        app.after(0, ui_status, tr("Short per URL") + ": " + t)
+    def upd(t: str, stage: Optional[str] = None, frac: Optional[float] = None):
+        def apply():
+            if stage == "title":
+                _url_short_state["title"] = t
+                _url_short_refresh()
+                return
+            if stage:
+                r = _prog_find(model, stage)
+                if r is not None:
+                    if r["state"] != "run":
+                        for r0 in model["rows"]:
+                            if r0["state"] == "run":
+                                r0["detail"] = ""          # erledigte Schritte zeigen „fertig“
+                        _prog_start(model, stage, frac=frac)
+                    else:
+                        r["frac"] = frac
+                    r["detail"] = f"{int(frac * 100)} %" if frac is not None else ""
+            ui_status(tr("Short per URL") + ": " + t)
+        app.after(0, apply)
 
     def worker():
         global _url_short_busy
         try:
             path = generate_short_from_url(url, upd)
-            app.after(0, ui_status, tr("Short fertig: {name}  (Ordner output/Shorts)").format(name=path.name))
-            app.after(0, play_done_sound)
-            app.after(0, lambda: open_path_portable(path.parent))
+
+            def ok():
+                _prog_finish(model)
+                _url_short_state["result"] = path
+                ui_status(tr("Short fertig: {name}  (Ordner output/Shorts)").format(name=path.name))
+                play_done_sound()
+                _url_short_refresh()
+            app.after(0, ok)
         except Exception as e:
-            msg = str(e)
-            app.after(0, ui_status, tr("Short per URL fehlgeschlagen"))
-            app.after(0, lambda: messagebox.showerror(tr("Short per URL"), msg))
+            msg = str(e) or e.__class__.__name__
+
+            def fail():
+                bad = next((r for r in model["rows"] if r["state"] == "run"), None) or \
+                    next((r for r in model["rows"] if r["state"] == "wait"), None)
+                if bad is not None:
+                    bad["state"] = "fail"
+                    bad["detail"] = tr("Fehler")
+                _url_short_state["error"] = msg
+                ui_status(tr("Short per URL fehlgeschlagen"))
+                _url_short_refresh()
+            app.after(0, fail)
         finally:
             _url_short_busy = False
 
     threading.Thread(target=worker, daemon=True).start()
+
+
+def _url_short_refresh():
+    """Fenster neu aufbauen (Titel, Ergebnis), falls es offen ist."""
+    w = _url_short_state.get("win")
+    try:
+        if w is not None and w.winfo_exists():
+            _build_url_short_content(w)
+    except Exception:
+        pass
+
+
+def open_url_short_window():
+    w = _url_short_state.get("win")
+    try:
+        if w is not None and w.winfo_exists():
+            w.deiconify()
+            w.lift()
+            return
+    except Exception:
+        pass
+    if _url_short_state.get("model") is None:
+        return
+    w = ctk.CTkToplevel(app)
+    w.title(tr("Short per URL"))
+    w.transient(app)
+    w.configure(fg_color=C_BG)
+    w.resizable(False, False)
+    _url_short_state["win"] = w
+    _build_url_short_content(w)
+    w.bind("<Escape>", lambda _e: w.destroy())
+    try:
+        w.update_idletasks()
+        w_, h_ = 600, max(w.winfo_reqheight(), 300)
+        w.geometry(f"{w_}x{h_}+{app.winfo_rootx() + app.winfo_width() - w_ - 40}+{app.winfo_rooty() + 90}")
+    except Exception:
+        pass
+
+
+def _build_url_short_content(w):
+    st = _url_short_state
+    for ch in w.winfo_children():
+        if type(ch).__name__ in ("CTkFrame",):
+            ch.destroy()
+    c = card(w)
+    c.pack(fill="both", expand=True, padx=14, pady=14)
+    hd = ctk.CTkFrame(c, fg_color="transparent")
+    hd.pack(fill="x", padx=20, pady=(16, 2))
+    ctk.CTkLabel(hd, text="▶  " + tr("Short per URL"), font=F(16, True), text_color=C_TEXT).pack(side="left")
+    help_button(hd, w).pack(side="right")
+    info = ctk.CTkFrame(c, fg_color="transparent")
+    info.pack(fill="x", padx=20)
+    H(info, "us_link")
+    u = st["url"]
+    u = u if len(u) <= 70 else u[:67] + "…"
+    if st["title"]:
+        ctk.CTkLabel(info, text=st["title"], font=F(13, True), text_color=C_TEXT, anchor="w", justify="left",
+                     wraplength=520).pack(fill="x")
+    ctk.CTkLabel(info, text=u, font=F(11), text_color=C_MUTED, anchor="w").pack(fill="x")
+    box = ctk.CTkFrame(c, fg_color=C_SOFT, corner_radius=10)
+    box.pack(fill="x", padx=20, pady=(10, 0))
+    H(box, "us_steps")
+    sl = StepList(box, st["model"], compact=True)
+    sl.frame.pack(fill="x", padx=14, pady=10)
+    res = ctk.CTkFrame(c, fg_color="transparent")
+    res.pack(fill="x", padx=20, pady=(10, 16))
+    H(res, "us_result")
+    if st["result"] is not None:
+        ctk.CTkLabel(res, text="✓  " + tr("Fertig: ") + st["result"].name, font=F(13, True), text_color=C_OK,
+                     anchor="w").pack(fill="x")
+        ctk.CTkLabel(res, text=tr("Gespeichert im Ordner output/Shorts"), font=F(11), text_color=C_MUTED,
+                     anchor="w").pack(fill="x")
+    elif st["error"]:
+        ctk.CTkLabel(res, text="✕  " + st["error"], font=F(12, True), text_color=C_DANGER_TX, anchor="w",
+                     justify="left", wraplength=540).pack(fill="x")
+    else:
+        ctk.CTkLabel(res, text=tr("Du kannst dieses Fenster schließen und weiterarbeiten – der Short entsteht im Hintergrund."),
+                     font=F(11), text_color=C_MUTED, anchor="w", justify="left", wraplength=540).pack(fill="x")
+    bt = ctk.CTkFrame(res, fg_color="transparent")
+    bt.pack(fill="x", pady=(12, 0))
+    btn_primary(bt, tr("Schließen"), w.destroy, width=120, height=34).pack(side="right")
+    if st["result"] is not None:
+        p_ = st["result"]
+        btn_secondary(bt, tr("Ordner öffnen"), lambda: open_path_portable(p_.parent), width=140).pack(side="right", padx=8)
+    try:
+        w.update_idletasks()
+        w.geometry(f"600x{max(w.winfo_reqheight(), 300)}")
+    except Exception:
+        pass
 
 
 # ===================== Schließen =====================
@@ -7521,7 +7670,7 @@ for _L, _topics in _HELP_V42.items():
 _HELP_V43 = {
  "de": {
   "header": ("Musik Video Generator", "Oben links siehst du Programmname und Slogan („Simply cut to the beat.“). Die Versionsnummer steht in der Titelleiste des Fensters. Rechts liegen die beiden Hilfe-Knöpfe:\n\n• „?“ startet die Klick-Hilfe: Danach klickst du auf einen beliebigen Bereich und bekommst genau diese Art Erklärung.\n• „⚙“ öffnet das Menü mit Kurzanleitung, PDF-Anleitung, Short per URL, Ordnern, Sprache, Darstellung (Hell/Dunkel), Zurücksetzen und den Links zu Updates und zur Mobile Version."),
-  "page_welcome": ("Willkommen", "Diese Seite erscheint nur beim ersten Start von Version 4.0. Links siehst du die Schritte im Überblick, rechts den wichtigsten Hinweis: Das Programm wird ohne Clips ausgeliefert.\n\nLege Videos und Fotos, die du für viele Videos verwendest, in den Pool-Ordner (clips/ im Programmordner). „Pool-Ordner öffnen“ öffnet ihn direkt im Explorer. Material, das nur zu einem Song passt, musst du nicht in den Pool legen – das wählst du später in Schritt 2 aus einem beliebigen Ordner oder ziehst es einfach ins Fenster.\n\nMit „Los geht's“ startest du bei Schritt 1."),
+  "page_welcome": ("Willkommen", "Diese Seite erscheint nur beim allerersten Start. Links siehst du die Schritte im Überblick, rechts den wichtigsten Hinweis: Das Programm wird ohne Clips ausgeliefert.\n\nLege Videos und Fotos, die du für viele Videos verwendest, in den Pool-Ordner (clips/ im Programmordner). „Pool-Ordner öffnen“ öffnet ihn direkt im Explorer. Material, das nur zu einem Song passt, musst du nicht in den Pool legen – das wählst du später in Schritt 2 aus einem beliebigen Ordner oder ziehst es einfach ins Fenster.\n\nMit „Los geht's“ startest du bei Schritt 1."),
   "start_welcome": ("Los geht's", "Schließt die Willkommensseite und startet bei Schritt 1. Die Seite erscheint danach nicht mehr. Den Pool-Ordner erreichst du jederzeit über das ⚙-Menü oder in Schritt 2."),
   "page_start": ("Schritt 1 – Start", "Hier legst du fest, was entstehen soll:\n\n1. Musikdatei: Button „Musikdatei wählen“ oder Datei einfach ins Fenster ziehen. Das Video bekommt den Namen der Musikdatei.\n2. Ausgabeformate: 16:9, 9:16 in voller Länge und/oder der 58-Sekunden-Short. Mehrfachauswahl ist möglich, jedes Format wird eine eigene Datei.\n\nUnten siehst du, unter welchen Namen die Videos im Ordner output/ gespeichert werden. „Weiter“ wird aktiv, sobald eine Musikdatei gewählt ist."),
   "page_media": ("Schritt 2 – Bildmaterial", "Hier sammelst du alle Clips und Fotos für das Video. Oben sind die drei Quellen: Clip-Pool, eigene Videos und eigene Fotos. Du kannst sie beliebig kombinieren. Alles Gewählte landet unten in „Deine Auswahl“.\n\nDer schnellste Weg: Videos, Fotos oder ganze Ordner aus dem Explorer direkt ins Programmfenster ziehen.\n\nWelcher Clip an welche Stelle kommt, entscheidet sich erst in Schritt 4 – dort kannst du die Reihenfolge noch ändern. „Weiter“ wird aktiv, sobald mindestens ein Clip oder Foto ausgewählt ist."),
@@ -7534,7 +7683,7 @@ _HELP_V43 = {
  },
  "en": {
   "header": ("Music Video Generator", "At the top left you see the program name and slogan (“Simply cut to the beat.”). The version number is shown in the window's title bar. On the right are the two help buttons:\n\n• “?” starts click help: then you click any area and get exactly this kind of explanation.\n• “⚙” opens the menu with quick guide, PDF manual, short from URL, folders, language, appearance (light/dark), reset and the links to updates and the mobile version."),
-  "page_welcome": ("Welcome", "This page only appears on the first start of version 4.0. On the left you see the steps at a glance, on the right the most important note: the program ships without clips.\n\nPut videos and photos you use for many videos into the pool folder (clips/ in the program folder). “Open pool folder” opens it directly in Explorer. Material that only fits one song does not need to go into the pool – you pick it later in step 2 from any folder or simply drag it into the window.\n\n“Let's go” starts at step 1."),
+  "page_welcome": ("Welcome", "This page only appears on the very first start. On the left you see the steps at a glance, on the right the most important note: the program ships without clips.\n\nPut videos and photos you use for many videos into the pool folder (clips/ in the program folder). “Open pool folder” opens it directly in Explorer. Material that only fits one song does not need to go into the pool – you pick it later in step 2 from any folder or simply drag it into the window.\n\n“Let's go” starts at step 1."),
   "start_welcome": ("Let's go", "Closes the welcome page and starts at step 1. The page does not appear again. You can reach the pool folder any time via the ⚙ menu or in step 2."),
   "page_start": ("Step 1 – Start", "Here you decide what will be created:\n\n1. Music file: the “Choose music file” button or simply drag the file into the window. The video gets the name of the music file.\n2. Output formats: 16:9, full-length 9:16 and/or the 58-second short. Several can be chosen, each format becomes its own file.\n\nAt the bottom you see the names under which the videos are saved in the output/ folder. “Next” becomes active once a music file is chosen."),
   "page_media": ("Step 2 – Footage", "Here you collect all clips and photos for the video. At the top are the three sources: clip pool, your videos and your photos. You can combine them freely. Everything you choose ends up below in “Your selection”.\n\nThe quickest way: drag videos, photos or whole folders from Explorer straight into the program window.\n\nWhich clip goes where is only decided in step 4 – there you can still change the order. “Next” becomes active once at least one clip or photo is selected."),
@@ -7547,7 +7696,7 @@ _HELP_V43 = {
  },
  "es": {
   "header": ("Generador de vídeos musicales", "Arriba a la izquierda ves el nombre del programa y el eslogan («Simply cut to the beat.»). El número de versión aparece en la barra de título de la ventana. A la derecha están los dos botones de ayuda:\n\n• «?» inicia la ayuda con clic: después haces clic en cualquier zona y recibes justo este tipo de explicación.\n• «⚙» abre el menú con guía rápida, manual PDF, short desde URL, carpetas, idioma, apariencia (claro/oscuro), restablecer y los enlaces a actualizaciones y a la versión móvil."),
-  "page_welcome": ("Bienvenida", "Esta página solo aparece en el primer inicio de la versión 4.0. A la izquierda ves los pasos de un vistazo y a la derecha el aviso más importante: el programa se entrega sin clips.\n\nPon los vídeos y fotos que usas en muchos vídeos en la carpeta del grupo (clips/ dentro de la carpeta del programa). «Abrir carpeta del grupo» la abre directamente en el Explorador. El material que solo encaja con una canción no tiene que ir al grupo: lo eliges después en el paso 2 desde cualquier carpeta o simplemente lo arrastras a la ventana.\n\n«Empezar» te lleva al paso 1."),
+  "page_welcome": ("Bienvenida", "Esta página solo aparece en el primerísimo inicio. A la izquierda ves los pasos de un vistazo y a la derecha el aviso más importante: el programa se entrega sin clips.\n\nPon los vídeos y fotos que usas en muchos vídeos en la carpeta del grupo (clips/ dentro de la carpeta del programa). «Abrir carpeta del grupo» la abre directamente en el Explorador. El material que solo encaja con una canción no tiene que ir al grupo: lo eliges después en el paso 2 desde cualquier carpeta o simplemente lo arrastras a la ventana.\n\n«Empezar» te lleva al paso 1."),
   "start_welcome": ("Empezar", "Cierra la página de bienvenida y empieza en el paso 1. La página no vuelve a aparecer. La carpeta del grupo la tienes siempre en el menú ⚙ o en el paso 2."),
   "page_start": ("Paso 1 – Inicio", "Aquí decides qué se va a crear:\n\n1. Archivo de música: botón «Elegir archivo de música» o arrastra el archivo a la ventana. El vídeo recibe el nombre del archivo de música.\n2. Formatos de salida: 16:9, 9:16 de duración completa y/o el short de 58 segundos. Puedes elegir varios; cada formato es un archivo aparte.\n\nAbajo ves con qué nombres se guardan los vídeos en la carpeta output/. «Siguiente» se activa en cuanto hay un archivo de música elegido."),
   "page_media": ("Paso 2 – Material", "Aquí reúnes todos los clips y fotos para el vídeo. Arriba están las tres fuentes: grupo de clips, tus vídeos y tus fotos. Puedes combinarlas libremente. Todo lo elegido acaba abajo en «Tu selección».\n\nLo más rápido: arrastra vídeos, fotos o carpetas enteras desde el Explorador directamente a la ventana del programa.\n\nQué clip va en qué lugar se decide en el paso 4, donde aún puedes cambiar el orden. «Siguiente» se activa en cuanto hay al menos un clip o una foto seleccionados."),
@@ -7808,6 +7957,27 @@ for _L, _adds in (
         if _k in HELP_TOPICS[_L]:
             _t, _b = HELP_TOPICS[_L][_k]
             HELP_TOPICS[_L][_k] = (_t, _b + _a)
+
+# Short per URL: Fortschrittsfenster
+_HELP_V53 = {
+ "de": {
+  "us_link": ("Video", "Zeigt, aus welchem Video der Short entsteht: den Link aus deiner Zwischenablage und – sobald das Programm ihn von YouTube abgerufen hat – den Titel des Videos. So siehst du sofort, ob du den richtigen Link kopiert hattest."),
+  "us_steps": ("Arbeitsschritte", "Der Short entsteht in sechs Schritten, jeder mit eigenem Balken; erledigte bekommen einen grünen Haken:\n\n• Link prüfen: Ist es ein YouTube-Link?\n• YouTube-Werkzeug vorbereiten: Beim allerersten Mal wird eine kleine Zusatzkomponente geladen (Internet nötig), danach geht dieser Schritt sofort.\n• Video-Infos abrufen: Länge und Titel; Livestreams, Playlists und Videos unter 45 Sekunden werden abgelehnt.\n• Video laden: mit Prozentanzeige.\n• Stärksten Abschnitt suchen: Das Programm hört sich den Ton an und wählt die stärksten 45 Sekunden.\n• Short erstellen: Hochformat 9:16 mit Originalton, weich ein- und ausgeblendet.\n\nSchlägt ein Schritt fehl, wird er rot markiert und die Ursache steht darunter."),
+  "us_result": ("Ergebnis", "Nach dem letzten Schritt steht hier der Name der fertigen Datei. Gespeichert wird sie im Ordner output/Shorts; „Ordner öffnen“ zeigt sie im Explorer, und ein Klang meldet das Ende.\n\nDu musst nicht warten: Das Fenster lässt sich jederzeit schließen, der Short entsteht im Hintergrund weiter, und die Statuszeile unten zeigt den Stand. Ein erneuter Klick auf ⚙ → Short per URL holt das Fenster zurück, solange er läuft.\n\nBitte nur Videos verwenden, für die du die Rechte hast."),
+ },
+ "en": {
+  "us_link": ("Video", "Shows which video the short is made from: the link from your clipboard and – as soon as the program has fetched it from YouTube – the video title. So you can see straight away whether you copied the right link."),
+  "us_steps": ("Work steps", "The short is made in six steps, each with its own bar; finished ones get a green tick:\n\n• Check link: is it a YouTube link?\n• Prepare YouTube tool: the very first time a small add-on is downloaded (internet needed); after that this step is instant.\n• Fetch video info: length and title; live streams, playlists and videos under 45 seconds are rejected.\n• Download video: with percentage.\n• Find the strongest section: the program listens to the sound and picks the strongest 45 seconds.\n• Create short: portrait 9:16 with the original sound, softly faded in and out.\n\nIf a step fails, it is marked red and the reason is shown below."),
+  "us_result": ("Result", "After the last step the name of the finished file appears here. It is saved in the output/Shorts folder; “Open folder” shows it in Explorer, and a sound signals the end.\n\nYou do not have to wait: the window can be closed at any time, the short keeps being made in the background and the status line at the bottom shows the progress. Clicking ⚙ → Short from URL again brings the window back while it is running.\n\nPlease only use videos you have the rights to."),
+ },
+ "es": {
+  "us_link": ("Vídeo", "Muestra de qué vídeo se crea el short: el enlace de tu portapapeles y, en cuanto el programa lo ha consultado en YouTube, el título del vídeo. Así ves enseguida si copiaste el enlace correcto."),
+  "us_steps": ("Pasos de trabajo", "El short se crea en seis pasos, cada uno con su propia barra; los terminados reciben una marca verde:\n\n• Comprobar enlace: ¿es un enlace de YouTube?\n• Preparar herramienta de YouTube: la primerísima vez se descarga un pequeño complemento (hace falta Internet); después este paso es inmediato.\n• Obtener datos del vídeo: duración y título; se rechazan directos, listas de reproducción y vídeos de menos de 45 segundos.\n• Descargar vídeo: con porcentaje.\n• Buscar la sección más fuerte: el programa escucha el sonido y elige los 45 segundos más fuertes.\n• Crear short: vertical 9:16 con el sonido original, con fundido suave de entrada y salida.\n\nSi un paso falla, se marca en rojo y debajo aparece el motivo."),
+  "us_result": ("Resultado", "Tras el último paso aparece aquí el nombre del archivo terminado. Se guarda en la carpeta output/Shorts; «Abrir carpeta» lo muestra en el Explorador y un sonido avisa del final.\n\nNo tienes que esperar: puedes cerrar la ventana cuando quieras, el short se sigue creando en segundo plano y la línea de estado de abajo muestra el avance. Mientras se está creando, al pulsar de nuevo ⚙ → Short desde URL vuelve a aparecer la ventana.\n\nUsa solo vídeos sobre los que tengas derechos."),
+ },
+}
+for _L, _topics in _HELP_V53.items():
+    HELP_TOPICS[_L].update(_topics)
 
 
 # ── Übersetzungen der v4.0-Oberfläche: deutscher Text -> (English, Español)
@@ -8189,6 +8359,29 @@ _TR_V49 = {
  "noch unter 1 Min.": ("less than 1 min left", "falta menos de 1 min"),
 }
 for _de, (_en, _es) in _TR_V49.items():
+    TRANSLATIONS["en"].setdefault(_de, _en)
+    TRANSLATIONS["es"].setdefault(_de, _es)
+
+# ── Short per URL: Fortschrittsfenster
+_TR_V50 = {
+ "Link prüfen": ("Check link", "Comprobar enlace"),
+ "YouTube-Werkzeug vorbereiten": ("Prepare YouTube tool", "Preparar herramienta de YouTube"),
+ "Video-Infos abrufen": ("Fetch video info", "Obtener datos del vídeo"),
+ "Video laden": ("Download video", "Descargar vídeo"),
+ "Stärksten Abschnitt suchen": ("Find the strongest section", "Buscar la sección más fuerte"),
+ "Short erstellen (45 s · 9:16)": ("Create short (45 s · 9:16)", "Crear short (45 s · 9:16)"),
+ "Fertig: ": ("Done: ", "Listo: "),
+ "Der Short konnte nicht erstellt werden.": ("The short could not be created.", "No se pudo crear el short."),
+ "Ordner öffnen": ("Open folder", "Abrir carpeta"),
+ "Gespeichert im Ordner output/Shorts": ("Saved in the output/Shorts folder", "Guardado en la carpeta output/Shorts"),
+ "Du kannst dieses Fenster schließen und weiterarbeiten – der Short entsteht im Hintergrund.": (
+    "You can close this window and keep working – the short is created in the background.",
+    "Puedes cerrar esta ventana y seguir trabajando: el short se crea en segundo plano."),
+ "Kopiere den Link eines YouTube-Videos (z. B. aus der Adresszeile des Browsers) und wähle dann noch einmal „Short per URL“.": (
+    "Copy the link of a YouTube video (e.g. from the browser's address bar) and then choose “Short from URL” again.",
+    "Copia el enlace de un vídeo de YouTube (p. ej. de la barra de direcciones del navegador) y elige de nuevo «Short desde URL»."),
+}
+for _de, (_en, _es) in _TR_V50.items():
     TRANSLATIONS["en"].setdefault(_de, _en)
     TRANSLATIONS["es"].setdefault(_de, _es)
 
