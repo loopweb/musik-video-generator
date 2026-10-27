@@ -1,5 +1,56 @@
 # Changelog — Musik Video Generator
 
+## v4.0
+
+Die Bedienung wurde komplett neu aufgebaut. Statt eines großen Fensters mit vielen Optionen führt das Programm jetzt in fünf Schritten zum Video: **1 Start → 2 Bildmaterial → 3 Extras → 4 Schnitt → 5 Fertig**. Die Schrittleiste oben zeigt jederzeit, wo man steht; erledigte Schritte lassen sich direkt anklicken.
+
+**Neu**
+
+- **Bildmaterial aus jeder Quelle in einer Auswahl:** Clip-Pool, beliebige Ordner, einzelne Dateien oder einfach per Drag & Drop ins Fenster (Videos, Fotos, ganze Ordner). Einzelne Einträge lassen sich wieder entfernen.
+- **Clip-Pool vereinfacht:** ein einziger Ordner `clips/` statt Stimmungs-Ordnern. Das Auswahlfenster zeigt Vorschaubilder; ein Klick wählt einen Clip aus oder ab. Vorschaubilder werden parallel erzeugt und auf der Festplatte zwischengespeichert – auch bei vielen Clips öffnet sich das Fenster schnell.
+- **Optionale Pool-Kategorien:** Unterordner in `clips/` erscheinen als Reiter („Alle“, je Unterordner, „Weitere“). Die Auswahl gilt über alle Reiter, der zuletzt benutzte Reiter wird gemerkt. Ohne Unterordner sieht alles aus wie gewohnt. Die alten Stimmungs-Ordner aus v3.0 werden so automatisch zu Reitern.
+- **Schnitt – Clipfolge vor dem Rendern (Schritt 4):** Das Programm plant das Video und zeigt jeden Abschnitt als Kachel. Clips per Ziehen verschieben oder mit „Clip tauschen“ durch einen anderen Clip gleicher Länge ersetzen. Pre-Intro, Intro und Outro sind gesperrt.
+- **Planen mit Schritt-Liste:** Musik analysieren, Schnitte setzen, Extras wählen, Clips verteilen, Vorschaubilder vorbereiten – jeder Schritt mit eigenem Balken und Haken.
+- **Live-Ansicht beim Rendern:** Ein Laufband zeigt den Abschnitt, der gerade entsteht; fertige laufen nach links hinaus. Darunter ein Übersichtsstreifen des ganzen Videos und eine Liste aller Arbeitsschritte (auch für automatisch mit erstellte Formate wie den Short) sowie der Gesamtfortschritt in Prozent.
+- **Nachträglich ändern:** Auf der Fertig-Seite führt „✏ Clips ändern“ zurück zur Clipfolge. „Änderungen übernehmen“ rendert nur, was sich geändert hat (Segment-Cache); „Verwerfen“ stellt den Stand des fertigen Videos wieder her und führt zurück zur Fertig-Seite.
+- **Ganzer Clip:** Ein zweiter Klick auf die markierte Schnittgeschwindigkeit hebt die Markierung auf. Dann läuft jeder Clip komplett; geschnitten wird auf dem letzten Beat vor dem Clip-Ende. Fotos stehen 4 Sekunden. Beim Verschieben oder Tauschen in Schritt 4 wandern die folgenden Schnitte mit.
+- **Loop aus einem Clip:** Liegt genau ein Video (ohne Fotos) in der Auswahl, läuft es automatisch als Loop durch den ganzen Song. Das Programm sucht die beste Loop-Stelle (ähnlichste Bilder, kurze Überblendung, Länge auf den Beat abgestimmt); ist kein sauberer Übergang möglich, wird es ein Boomerang (vor und zurück). Gerendert wird nur ein Durchlauf, die Wiederholungen werden ohne Neuberechnung angehängt. Schritt 4 zeigt dafür eine Loop-Karte.
+- **Thumbnail-Werkzeugpalette:** „✎ Bearbeiten“ auf der Fertig-Seite öffnet ein Fenster mit Live-Vorschau: Bild per Schieberegler frei aus dem Video wählen, Helligkeit/Kontrast/Sättigung, Abdunkeln hinter dem Text, zwei Textzeilen mit Schrift, Größe, Farbe, Kontur, Schatten und Position, eigenes Logo sowie Vorlagen (optional automatisch auf jedes neue Thumbnail anwenden). Ohne Bearbeiten bleibt alles automatisch wie bisher. Text und Logo lassen sich in der Vorschau frei mit der Maus verschieben.
+- **Fertig-Seite mit Thumbnail-Generator:** Aus dem eigenen Video wird automatisch ein YouTube-Thumbnail (1280×720, JPG, ohne Titel) gewählt und als `<Titel>_Thumbnail.jpg` im Output-Ordner gespeichert. „↻ Anderes Bild“ schlägt ein anderes vor. Bei reinem Hochformat gibt es nur ein Vorschaubild. Das Video öffnet sich wie bisher im Standard-Player.
+- **Short-Logik:** Wird der 58-s-Short zusammen mit 16:9 oder 9:16 gewählt, entsteht er automatisch mit. Allein gewählt, lässt sich seine Clipfolge sortieren.
+- **Formate nachträglich ändern:** Wird nach dem Rendern ein Format dazu angekreuzt, erstellt „▶ Fehlende Formate erstellen“ nur dieses (ohne das Hauptvideo neu zu rendern). Abgewählte Formate verschwinden von der Fertig-Seite, die Dateien bleiben im Output-Ordner.
+- **Sprachwechsel ohne Neustart:** ⚙ → Sprache öffnet denselben Auswahlbildschirm wie beim ersten Start; die Auswahl bleibt erhalten.
+- **Darstellung Hell / Dunkel / System** im ⚙-Menü.
+- **Neuer erster Start:** ansprechender Sprachbildschirm, danach eine einmalige Willkommensseite mit Hinweis auf den Clip-Pool.
+- **Klick-Hilfe vollständig neu:** jeder Bereich jeder Seite hat eine ausführliche Erklärung in Deutsch, English und Español.
+- **Bedienungsanleitungen** (DE/EN/ES) komplett neu mit aktuellen Screenshots.
+- **Programm-Icon** im Fenster, in der Titelleiste und in allen Unterfenstern; das Icon ist eingebettet und funktioniert auch ohne `icon.ico`.
+- **Cache wird automatisch aufgeräumt:** Gerenderte Abschnitte beim Programmstart und bei „Neues Video“, vorbereitete Clips nach 60 Tagen ohne Nutzung (höchstens 5 GB), Vorschaubilder nach 30 Tagen (höchstens 300 MB).
+- **PDF-Anleitungen in der EXE:** Die drei Anleitungen sind eingebaut und werden beim Start in den Ordner manual/ gelegt; ⚙ → PDF-Anleitung öffnet die passende Sprache. Liegt eine PDF neben der EXE, hat diese Vorrang.
+- **Ordner logo/:** für eigene Logos im Thumbnail-Editor, zu Beginn mit dem MVG-Logo; „Logo wählen …“ öffnet direkt diesen Ordner.
+- **Über MVG** (⚙-Menü): Version mit Update-Prüfung, Copyright und MIT-Lizenz, Links zu Homepage, GitHub und „Fehler melden“, „☕ MVG unterstützen“ sowie die Lizenzen aller verwendeten Programme (inkl. der eingebauten FFmpeg-Version).
+- **Update-Hinweis:** Beim Start fragt MVG still bei GitHub nach; gibt es eine neuere Version, erscheint oben „⬆ Version … verfügbar“ mit Link zur Download-Seite. Ohne Internet passiert nichts, installiert wird nichts automatisch.
+- **Restzeit beim Rendern:** neben den Prozent steht nach wenigen Sekunden „noch ca. … Min.“.
+- **Weiches Ende:** Ohne Outro blenden Bild und Ton in der letzten Sekunde aus, statt hart abzubrechen.
+- **Ordner merken:** Die Dateiauswahl für Musik, Videos und Fotos öffnet sich im zuletzt benutzten Ordner.
+- **Klick-Hilfe in Unterfenstern:** Thumbnail-Editor und Pool-Fenster haben einen eigenen „?“-Button.
+
+**Entfernt**
+
+- Einfach-Modus (die neue Schrittführung ersetzt ihn)
+- Stimmungs-Ordner und Pool-Größe
+- Separater Clip-Editor-Dialog (ersetzt durch Schritt 4)
+- Ordner `photos/` (Fotos kommen aus jedem beliebigen Ordner)
+
+**Fehlerbehebung**
+
+- Titel erschien bei aktivem Pre-Intro zu früh – er startet jetzt nach Pre-Intro und Intro.
+- Ein bestehendes Video wird erst überschrieben, wenn das neue vollständig fertig ist.
+- Vorschaubilder im Pool erschienen teils erst nach einem Klick.
+- Die Willkommensseite zählte Dateien in Pool-Unterordnern nicht mit.
+- Loop-Render konnte unter Windows hängen bleiben; ffmpeg-Prozesse werden beim Beenden des Programms jetzt zuverlässig geschlossen, gesperrte Zwischendateien führen nicht mehr zu „WinError 32“.
+- „Short per URL“ konnte in der EXE ohne Konsolenfenster beim Analysieren hängen bleiben.
+
 ## v3.0
 
 **Neu**

@@ -2,8 +2,8 @@ numpy
 librosa
 customtkinter
 Pillow
+tkinterdnd2
 yt-dlp[default]
 
 # nur für den EXE-Build benötigt (siehe build_exe.bat)
 pyinstaller
-tkinterdnd2

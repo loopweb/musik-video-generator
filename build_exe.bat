@@ -1,7 +1,7 @@
 @echo off
 echo.
 echo  ============================================
-echo   Musik Video Generator v3.0 - EXE Build
+echo   Musik Video Generator v4.0 - EXE Build
 echo  ============================================
 echo.
 
@@ -20,15 +20,18 @@ py -3.12 -m PyInstaller ^
   --add-data="C:\Projekt\ffmpeg;ffmpeg" ^
   --add-data="C:\Projekt\Sound;Sound" ^
   --add-data="C:\Projekt\splash.png;." ^
+  --add-data="C:\Projekt\MVG_Bedienungsanleitung.pdf;." ^
+  --add-data="C:\Projekt\MVG_Manual_EN.pdf;." ^
+  --add-data="C:\Projekt\MVG_Manual_ES.pdf;." ^
   "C:\Projekt\gui_step3.py"
 
 echo.
 if %ERRORLEVEL% == 0 (
     echo  Build erfolgreich! EXE liegt in: dist\MVG.exe
     echo.
-    echo  WICHTIG: alle drei PDF-Anleitungen (MVG_Bedienungsanleitung.pdf, MVG_Manual_EN.pdf, MVG_Manual_ES.pdf) manuell in den dist-Ordner
-    echo  kopieren, damit sie neben der EXE liegt und ohne Programmstart
-    echo  geoeffnet werden kann.
+    echo  Die drei PDF-Anleitungen sind in die EXE eingebaut.
+    echo  Optional koennen sie zusaetzlich neben die EXE gelegt werden,
+    echo  damit man sie auch ohne Programmstart oeffnen kann.
 ) else (
     echo  Build fehlgeschlagen! Siehe Fehler oben.
 )
