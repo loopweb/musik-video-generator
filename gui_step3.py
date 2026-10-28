@@ -1,8 +1,8 @@
-# Musik Video Generator v4.1
+# Musik Video Generator v4.2
 
 from __future__ import annotations
 
-APP_VERSION = "4.1"
+APP_VERSION = "4.2"
 
 import os
 import sys
@@ -1659,6 +1659,18 @@ def render_loop_cut(unit: Path, frames: int, unit_frames: int, out_seg: Path, al
         run_hidden([ffmpeg_cmd(), "-y", "-hide_banner", "-stream_loop", str(reps), "-i", str(unit)] + enc, timeout=900)
 
 
+# Gewähltes Pre-Intro / Intro / Outro (Dateiname); leer = zufällig
+EXTRA_CHOICE: dict = {"vorspann": "", "intro": "", "outro": ""}
+
+
+def _pick_extra(cands: list, key: str):
+    want = EXTRA_CHOICE.get(key) or ""
+    for c in cands:
+        if want and c.name == want:
+            return c
+    return random.choice(cands)
+
+
 def plan_video(
     audio_path: str,
     media: list,
@@ -1725,13 +1737,13 @@ def plan_video(
     if use_intro:
         cands = list_video_files(INTRO_DIR)
         if cands:
-            intro_src = random.choice(cands)
+            intro_src = _pick_extra(cands, "intro")
             intro_len = min(media_duration(intro_src), music_dur)
             intro_len = round(intro_len * FPS) / FPS
             if intro_len < 0.20:
                 intro_src, intro_len = None, 0.0
-    outro_src = random.choice(list_video_files(OUTRO_DIR)) if use_outro and list_video_files(OUTRO_DIR) else None
-    vorspann_src = random.choice(list_video_files(VORSPANN_DIR)) if use_vorspann and list_video_files(VORSPANN_DIR) else None
+    outro_src = _pick_extra(list_video_files(OUTRO_DIR), "outro") if use_outro and list_video_files(OUTRO_DIR) else None
+    vorspann_src = _pick_extra(list_video_files(VORSPANN_DIR), "vorspann") if use_vorspann and list_video_files(VORSPANN_DIR) else None
 
     loop_info = None
     loop_src = None
@@ -3697,6 +3709,9 @@ def init_vars():
     outro_var = ctk.BooleanVar(value=True)
     vorspann_var = ctk.BooleanVar(value=False)
     title_var = ctk.BooleanVar(value=False)
+    ch = load_settings().get("extra_choice") or {}
+    for k_ in EXTRA_CHOICE:
+        EXTRA_CHOICE[k_] = str(ch.get(k_) or "")
 
 
 def selected_formats() -> list[str]:
@@ -4318,7 +4333,7 @@ def _folder_hint(folder: Path) -> tuple[str, bool]:
         return tr("Ordner leer"), False
     if n == 1:
         return tr("1 Datei"), True
-    return tr("{n} Dateien, zufällig").format(n=n), True
+    return tr("{n} Dateien").format(n=n), True          # Auswahl „Zufällig“/Datei steht im Feld daneben
 
 
 def build_step3(parent):
@@ -4336,7 +4351,7 @@ def build_step3(parent):
     ctk.CTkLabel(left, text=tr("Gilt für 16:9 und 9:16 in voller Länge – der 58-Sekunden-Short bleibt immer ohne."),
                  font=F(12), text_color=C_MUTED, anchor="w").pack(fill="x", padx=24, pady=(0, 6))
 
-    def opt_row(var, title, desc, folder: Optional[Path], hkey):
+    def opt_row(var, title, desc, folder: Optional[Path], hkey, choice_key: Optional[str] = None):
         r = ctk.CTkFrame(left, fg_color=C_SOFT, corner_radius=10, border_width=1, border_color=C_BORDER)
         r.pack(fill="x", padx=24, pady=3)
         H(r, hkey)
@@ -4349,6 +4364,28 @@ def build_step3(parent):
             sw = ctk.CTkSwitch(r, text="", variable=ctk.BooleanVar(value=False), width=46, state="disabled")
         sw.pack(side="right", padx=12)
         H(sw, hkey)
+        files = list_video_files(folder) if (folder is not None and choice_key) else []
+        if len(files) > 1:                 # mehrere Dateien: Auswahl „Zufällig“ oder eine bestimmte
+            names = sorted((f_.name for f_ in files), key=str.lower)
+            rnd = tr("Zufällig")
+            disp = {(n_ if len(n_) <= 26 else n_[:25] + "…"): n_ for n_ in names}
+            cur_ = EXTRA_CHOICE.get(choice_key) or ""
+            cur_disp = next((d_ for d_, n_ in disp.items() if n_ == cur_), rnd)
+            if cur_disp == rnd:
+                EXTRA_CHOICE[choice_key] = ""
+
+            def on_pick(v, k=choice_key, m=disp):
+                EXTRA_CHOICE[k] = m.get(v, "")
+                save_settings({"extra_choice": dict(EXTRA_CHOICE)})
+                _refresh_step3_summary()
+
+            om = ctk.CTkOptionMenu(r, values=[rnd] + list(disp), command=on_pick, width=170, height=28,
+                                   font=F(12), dropdown_font=F(12), fg_color=C_CARD, button_color=C_SOFT_HOVER,
+                                   button_hover_color=C_BORDER, text_color=C_TEXT, dropdown_fg_color=C_CARD,
+                                   dropdown_text_color=C_TEXT, dropdown_hover_color=C_SOFT_HOVER, dynamic_resizing=False)
+            om.set(cur_disp)
+            om.pack(side="right")
+            H(om, hkey)
         box = ctk.CTkFrame(r, fg_color="transparent")
         box.pack(side="left", fill="x", expand=True, padx=14, pady=7)
         l1 = ctk.CTkFrame(box, fg_color="transparent")
@@ -4365,9 +4402,9 @@ def build_step3(parent):
         ctk.CTkLabel(box, text=desc if usable else tr("Lege ein Video in den Ordner {name}/, dann ist die Option wählbar.").format(name=folder.name),
                      font=F(11), text_color=C_MUTED, anchor="w", height=16).pack(fill="x")
 
-    opt_row(vorspann_var, tr("Pre-Intro"), tr("Eigenes Video mit Ton vor der Musik"), VORSPANN_DIR, "sw_pre")
-    opt_row(intro_var, tr("Intro"), tr("Stummer Clip am Anfang, Musik läuft schon"), INTRO_DIR, "sw_intro")
-    opt_row(outro_var, tr("Outro"), tr("Eigenes Video mit Ton nach der Musik"), OUTRO_DIR, "sw_outro")
+    opt_row(vorspann_var, tr("Pre-Intro"), tr("Eigenes Video mit Ton vor der Musik"), VORSPANN_DIR, "sw_pre", "vorspann")
+    opt_row(intro_var, tr("Intro"), tr("Stummer Clip am Anfang, Musik läuft schon"), INTRO_DIR, "sw_intro", "intro")
+    opt_row(outro_var, tr("Outro"), tr("Eigenes Video mit Ton nach der Musik"), OUTRO_DIR, "sw_outro", "outro")
     ttl = get_title_from_music(music_file) if music_file else ""
     opt_row(title_var, tr("Titel"), tr("Musiktitel unten links einblenden") + (f" („{ttl[:40]}“)" if ttl else ""), None, "sw_title")
 
@@ -4441,9 +4478,12 @@ def _refresh_step3_summary():
         return
     n_v = sum(1 for it in selection if it["kind"] == "video")
     n_p = len(selection) - n_v
-    extras = [tr(n) for n, v, f in (("Pre-Intro", vorspann_var, VORSPANN_DIR), ("Intro", intro_var, INTRO_DIR),
-                                     ("Outro", outro_var, OUTRO_DIR), ("Titel", title_var, None))
-              if v.get() and (f is None or list_video_files(f))]
+    extras = []
+    for n, v, f, k in (("Pre-Intro", vorspann_var, VORSPANN_DIR, "vorspann"), ("Intro", intro_var, INTRO_DIR, "intro"),
+                       ("Outro", outro_var, OUTRO_DIR, "outro"), ("Titel", title_var, None, None)):
+        if v.get() and (f is None or list_video_files(f)):
+            ch = EXTRA_CHOICE.get(k) if k else ""
+            extras.append(tr(n) + (f" ({Path(ch).stem})" if ch and f is not None and (f / ch).exists() else ""))
     lines = [
         tr("Musik: ") + (Path(music_file).name if music_file else "–") + (f"  ({fmt_time(music_dur)})" if music_dur else ""),
         tr("Formate: ") + " + ".join(FORMAT_LABELS[k] for k in selected_formats()),
@@ -4489,6 +4529,7 @@ def current_plan_signature():
         tuple(sorted(p.name for p in list_video_files(OUTRO_DIR))),
         tuple(sorted(p.name for p in list_video_files(VORSPANN_DIR))),
         speed_var.get(),
+        tuple(sorted(EXTRA_CHOICE.items())),
     )
 
 
@@ -8406,6 +8447,16 @@ for _L, _a in (("de", "\n\nClip wird vorbereitet: Videos in besonderen Formaten 
     HELP_TOPICS[_L]["render_progress"] = (_t, _b + _a)
 
 
+# 4.2: Pre-Intro / Intro / Outro auswählen
+for _L, _a in (("de", "\n\nAuswahl: Liegen mehrere Videos im Ordner, erscheint daneben ein Auswahlfeld. „Zufällig“ (Standard) nimmt bei jedem Planen eines davon per Zufall; du kannst aber auch ein bestimmtes Video wählen. Die Wahl wird gemerkt. Fehlt das gewählte Video später im Ordner, gilt wieder „Zufällig“. In der Zusammenfassung rechts steht das gewählte Video in Klammern."),
+               ("en", "\n\nChoice: if there are several videos in the folder, a selection box appears next to it. “Random” (default) picks one of them at random each time the video is planned; but you can also choose a specific video. The choice is remembered. If the chosen video is later missing from the folder, “Random” applies again. The summary on the right shows the chosen video in brackets."),
+               ("es", "\n\nSelección: si hay varios vídeos en la carpeta, aparece al lado un campo de selección. «Aleatorio» (predeterminado) elige uno al azar cada vez que se planifica; pero también puedes elegir un vídeo concreto. La elección se recuerda. Si más tarde falta el vídeo elegido en la carpeta, vuelve a aplicarse «Aleatorio». El resumen de la derecha muestra el vídeo elegido entre paréntesis.")):
+    for _k in ("sw_pre", "sw_intro", "sw_outro"):
+        if _k in HELP_TOPICS[_L]:
+            _t, _b = HELP_TOPICS[_L][_k]
+            HELP_TOPICS[_L][_k] = (_t, _b + _a)
+
+
 # ── Übersetzungen der v4.0-Oberfläche: deutscher Text -> (English, Español)
 _TR_V4 = {
  "Start": ("Start", "Inicio"),
@@ -8838,6 +8889,8 @@ _TR_V51 = {
     "ffmpeg has not responded for {n} minutes and was stopped. Please create an error report via ⚙ → Report a problem.",
     "ffmpeg no responde desde hace {n} minutos y se ha detenido. Crea un informe de error en ⚙ → Informar de un problema."),
  "vorbereiten": ("preparing", "preparando"),
+ "Zufällig": ("Random", "Aleatorio"),
+ "{n} Dateien": ("{n} files", "{n} archivos"),
  "Fehlerbericht erstellt": ("Error report created", "Informe de error creado"),
  "Die Datei liegt auf deinem Desktop:": ("The file is on your desktop:", "El archivo está en tu escritorio:"),
  "Schick sie an den Entwickler – oder melde den Fehler auf GitHub.": ("Send it to the developer – or report the problem on GitHub.", "Envíaselo al desarrollador o informa del problema en GitHub."),

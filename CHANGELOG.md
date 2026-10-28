@@ -1,5 +1,16 @@
 # Changelog — Musik Video Generator
 
+## v4.2
+
+**Neu**
+
+- **Pre-Intro, Intro und Outro auswählen:** Liegen mehrere Videos im jeweiligen Ordner, erscheint in Schritt 3 neben dem Schalter ein Auswahlfeld – „Zufällig“ (wie bisher) oder ein bestimmtes Video. Die Wahl wird gemerkt; fehlt das Video später, gilt wieder „Zufällig“. Die Zusammenfassung zeigt das gewählte Video in Klammern.
+
+**Verbessert**
+
+- **Protokolle im Ordner `logs/`:** Fehler-, Ablauf- und FFmpeg-Protokoll liegen nicht mehr lose neben der EXE; alte Protokolle werden beim ersten Start dorthin verschoben. Vom Fehlerprotokoll bleiben nur die jüngsten Einträge (höchstens ca. 1 MB).
+- **Homepage:** neues Beispielvideo; auf dem Handy führt der Knopf oben rechts zu MVG Mobil statt zum Windows-Download.
+
 ## v4.1
 
 **Neu**
@@ -11,7 +22,7 @@
 **Verbessert**
 
 - **Schutz gegen Hänger:** Jeder ffmpeg-Schritt wird überwacht. Tut sich 5 Minuten lang nichts, wird er mit einer klaren Meldung abgebrochen. ffmpeg bekommt kein offenes Eingabe- und Ausgabefenster mehr (`-nostdin`, Ausgaben ins Protokoll).
-- **Protokolle:** `mvg_start.log` hält jeden Render-Schritt mit Uhrzeit fest, `mvg_ffmpeg.log` die Ausgaben von ffmpeg. Die Protokolle der vorigen Sitzung bleiben als `…_vorher.log` erhalten. Alle Protokolle liegen jetzt übersichtlich im Ordner `logs/` (alte werden beim ersten Start dorthin verschoben); vom Fehlerprotokoll bleiben nur die jüngsten Einträge (höchstens ca. 1 MB).
+- **Protokolle:** `mvg_start.log` hält jeden Render-Schritt mit Uhrzeit fest, `mvg_ffmpeg.log` die Ausgaben von ffmpeg. Die Protokolle der vorigen Sitzung bleiben als `…_vorher.log` erhalten.
 
 **Fehlerbehebung**
 
