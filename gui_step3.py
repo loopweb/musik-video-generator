@@ -1,8 +1,8 @@
-# Musik Video Generator v4.0
+# Musik Video Generator v4.1
 
 from __future__ import annotations
 
-APP_VERSION = "4.0"
+APP_VERSION = "4.1"
 
 import os
 import sys
@@ -120,6 +120,13 @@ def _trace(msg: str):
     try:
         base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
         mode = "w" if msg == "start" else "a"
+        if msg == "start":
+            for _n in ("mvg_start.log", "mvg_ffmpeg.log"):
+                try:
+                    if (base / _n).exists():
+                        os.replace(base / _n, base / _n.replace(".log", "_vorher.log"))
+                except Exception:
+                    pass
         with open(base / "mvg_start.log", mode, encoding="utf-8") as f:
             f.write(msg + "\n")
     except Exception:
@@ -152,29 +159,120 @@ if os.name == "nt":
 
 _CHILDREN: set = set()                 # laufende ffmpeg-Prozesse (werden beim Beenden mit beendet)
 _CHILD_LOCK = threading.Lock()
+STALL_SEC = 300                        # ffmpeg ohne jeden Fortschritt so lange -> gilt als hängend, wird beendet
+_LOG_LOCK = threading.Lock()
 
 
-def run_hidden(cmd: list[str], timeout: Optional[float] = None) -> subprocess.CompletedProcess:
-    proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW, stdin=subprocess.DEVNULL)
+def _log_dir() -> Path:
+    return Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+
+
+def _ffmpeg_log():
+    """Ausgaben von ffmpeg landen in mvg_ffmpeg.log (statt ins Leere – ohne Konsole ein bekannter Hänger-Grund)."""
+    try:
+        p = _log_dir() / "mvg_ffmpeg.log"
+        if p.exists() and p.stat().st_size > 5_000_000:
+            p.write_text("", encoding="utf-8")
+        return open(p, "a", encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+
+
+def _short_cmd(cmd: list) -> str:
+    parts = []
+    for a in cmd[1:]:
+        a = str(a)
+        parts.append(Path(a).name if ("/" in a or "\\" in a) and len(a) > 40 else (a if len(a) <= 60 else a[:57] + "…"))
+    return "ffmpeg " + " ".join(parts)
+
+
+def run_hidden(cmd: list[str], timeout: Optional[float] = None,
+               progress_cb: Optional[Callable[[float], None]] = None) -> subprocess.CompletedProcess:
+    """ffmpeg ohne Konsole starten. stdin geschlossen, Ausgaben ins Log, Wächter gegen Hänger:
+    tut sich STALL_SEC lang nichts (Zieldatei wächst nicht, kein Fortschritt), wird der Prozess beendet."""
+    import time as _t
+    cmd = [str(c) for c in cmd]
+    is_ff = Path(cmd[0]).name.lower().startswith("ffmpeg")
+    if is_ff:
+        extra = ["-nostdin"] + (["-progress", "pipe:1", "-nostats"] if progress_cb else ["-nostats"])
+        cmd = cmd[:1] + [e for e in extra if e not in cmd] + cmd[1:]
+    log = _ffmpeg_log()
+    if log is not None:
+        with _LOG_LOCK:
+            log.write(f"\n[{_t.strftime('%H:%M:%S')}] {_short_cmd(cmd) if is_ff else ' '.join(cmd)}\n")
+            log.flush()
+    out_path = Path(cmd[-1]) if is_ff and not cmd[-1].startswith(("-", "pipe:")) else None
+    state = {"last": _t.time(), "size": -1}
+    proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE if progress_cb else subprocess.DEVNULL,
+                            stderr=log if log is not None else subprocess.DEVNULL)
     with _CHILD_LOCK:
         _CHILDREN.add(proc)
-    try:
+
+    def read_progress():
         try:
-            rc = proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-            raise
+            for raw in proc.stdout:
+                line = raw.decode("utf-8", "replace").strip()
+                if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
+                    try:
+                        sec = int(line.split("=", 1)[1]) / 1_000_000
+                    except ValueError:
+                        continue
+                    state["last"] = _t.time()
+                    try:
+                        progress_cb(sec)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    reader = None
+    if progress_cb:
+        reader = threading.Thread(target=read_progress, daemon=True)
+        reader.start()
+    start = _t.time()
+    try:
+        while True:
+            try:
+                rc = proc.wait(timeout=1.0)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            now = _t.time()
+            if timeout is not None and now - start > timeout:
+                proc.kill()
+                proc.wait()
+                raise subprocess.TimeoutExpired(cmd, timeout)
+            if out_path is not None:
+                try:
+                    sz = out_path.stat().st_size
+                except OSError:
+                    sz = -1
+                if sz != state["size"]:
+                    state["size"], state["last"] = sz, now
+            if now - state["last"] > STALL_SEC:
+                proc.kill()
+                proc.wait()
+                _trace(f"{_t.strftime('%H:%M:%S')} ffmpeg hing und wurde beendet: {_short_cmd(cmd)}")
+                raise RuntimeError(tr("ffmpeg reagiert seit {n} Minuten nicht mehr und wurde abgebrochen. Bitte über ⚙ → Problem melden einen Fehlerbericht erstellen.").format(n=max(1, STALL_SEC // 60)))
+        if reader is not None:
+            reader.join(timeout=2)
         if rc != 0:
             raise subprocess.CalledProcessError(rc, cmd)
         return subprocess.CompletedProcess(cmd, rc)
     finally:
         with _CHILD_LOCK:
             _CHILDREN.discard(proc)
+        if log is not None:
+            try:
+                log.close()
+            except Exception:
+                pass
 
 
-def check_output_hidden(cmd: list[str], timeout: Optional[float] = None) -> bytes:
-    return subprocess.check_output(cmd, creationflags=CREATE_NO_WINDOW, stdin=subprocess.DEVNULL, timeout=timeout)
+def check_output_hidden(cmd: list[str], timeout: Optional[float] = 300) -> bytes:
+    return subprocess.check_output(cmd, creationflags=CREATE_NO_WINDOW, stdin=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=timeout)
 
 
 def kill_child_processes() -> None:
@@ -791,10 +889,19 @@ def normalize_to_cache_video_only(original: Path, status_cb: Optional[Callable[[
     key = cache_key_for_file(original)
     out = CACHE_DIR / f"{key}.mp4"
     if out.exists():
-        return out
+        try:
+            if float(ffprobe_json(out).get("format", {}).get("duration") or 0) > 0:
+                return out
+        except Exception:
+            pass
+        try:
+            out.unlink()                       # unvollständig (z. B. nach einem Abbruch) -> neu vorbereiten
+        except Exception:
+            pass
 
     if status_cb:
-        status_cb(tr("Normalisiere: ") + original.name)
+        status_cb(tr("Clip wird vorbereitet: ") + original.name)
+    _trace(time.strftime("%H:%M:%S") + " vorbereiten: " + original.name)
 
     vf = f"setpts=PTS-STARTPTS,fps={FPS},setsar=1"
 
@@ -810,9 +917,33 @@ def normalize_to_cache_video_only(original: Path, status_cb: Optional[Callable[[
         "-crf", "20",
         "-preset", "veryfast",
         "-fps_mode", "cfr",
-        str(out)
+        str(out.with_name(out.stem + ".part.mp4"))
     ]
-    run_hidden(cmd)
+    tmp = Path(cmd[-1])
+    dur = 0.0
+    try:
+        dur = float(ffprobe_json(original).get("format", {}).get("duration") or 0)
+    except Exception:
+        pass
+    last = [-1]
+
+    def prog(sec: float):
+        if status_cb and dur > 0:
+            pct = max(0, min(99, int(sec * 100 / dur)))
+            if pct != last[0]:
+                last[0] = pct
+                status_cb(tr("Clip wird vorbereitet: ") + original.name + f" · {pct} %")
+
+    try:
+        run_hidden(cmd, progress_cb=prog)
+        os.replace(tmp, out)
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except Exception:
+            pass
+    _trace(time.strftime("%H:%M:%S") + " vorbereitet: " + original.name)
     return out
 
 
@@ -1780,7 +1911,11 @@ def execute_plan(
         if progress_cb and n_work:
             progress_cb(0.03 + 0.85 * done_work[0] / n_work)
 
+    import time as _tm
+    _trace(_tm.strftime("%H:%M:%S") + f" Render: {out_path.name} · {len(plan['slots'])} Abschnitte · Modus {plan.get('mode')}")
+
     def phase(name):
+        _trace(_tm.strftime("%H:%M:%S") + " Schritt: " + str(name))
         if phase_cb:
             try:
                 phase_cb(name)
@@ -1788,6 +1923,8 @@ def execute_plan(
                 pass
 
     def cb(i, state):
+        if state == "run":
+            _trace(_tm.strftime("%H:%M:%S") + f" Abschnitt {i + 1} beginnt")
         if seg_cb:
             try:
                 seg_cb(i, state)
@@ -2978,6 +3115,11 @@ def cleanup_cache() -> None:
     - cache/thumbs: länger als 30 Tage unbenutzt, und höchstens 300 MB"""
     import time as _t
     for f in SEGMENTS_DIR.glob("*.mp4"):
+        try:
+            f.unlink()
+        except Exception:
+            pass
+    for f in CACHE_DIR.glob("*.part.mp4"):              # Reste eines abgebrochenen Vorbereitens
         try:
             f.unlink()
         except Exception:
@@ -5023,7 +5165,8 @@ def build_step4(parent):
         ctk.CTkLabel(c, text=plan_error or "", font=F(12), text_color=C_DANGER_TX, anchor="w", justify="left",
                      wraplength=960).pack(fill="x", padx=28, pady=22)
         set_footer(left=[("←  " + tr("Zurück"), lambda: go(3), "secondary", True, "back")],
-                   right=[(tr("Erneut versuchen"), start_planning, "primary", True, "retry")])
+                   right=[(tr("Problem melden"), create_problem_report, "secondary", True, "report"),
+                          (tr("Erneut versuchen"), start_planning, "primary", True, "retry")])
         return
 
     rendered = plan_rendered_version >= 0
@@ -5199,7 +5342,8 @@ def _step4_footer():
         set_footer()
     elif render_failed:
         set_footer(left=[("←  " + tr("Zurück"), lambda: go(3), "secondary", True, "back")],
-                   right=[("▶  " + tr("Erneut versuchen"), do_render, "primary", True, "retry")])
+                   right=[(tr("Problem melden"), create_problem_report, "secondary", True, "report"),
+                          ("▶  " + tr("Erneut versuchen"), do_render, "primary", True, "retry")])
     elif rendered and not dirty and missing_formats():
         set_footer(left=[("←  " + tr("Zurück"), lambda: go(3), "secondary", True, "back")],
                    right=[(tr("Zur Fertig-Seite") + "  →", lambda: go(5), "secondary", plan_is_rendered(), "to_done"),
@@ -5631,7 +5775,7 @@ def do_render():
                     if has_main and idx == 0:
                         p = main_plan
                         execute_plan(p, out, title_overlay=use_title, title_text=title_text,
-                                     status_cb=lambda t, pr=prefix: app.after(0, ui_status, pr + t),
+                                     status_cb=lambda t, pr=prefix: app.after(0, _render_status, t, pr),
                                      progress_cb=lambda v, i=idx: app.after(0, prog, v, i),
                                      seg_cb=lambda i, s: app.after(0, _set_tile_state, i, s),
                                      seg_dir=SEGMENTS_DIR, prune=True,
@@ -5644,7 +5788,7 @@ def do_render():
                             _tile_pil(t, p["is_shorts"])
                         app.after(0, extra_images)
                         execute_plan(p, out, title_overlay=use_title, title_text=title_text,
-                                     status_cb=lambda t, pr=prefix: app.after(0, ui_status, pr + t),
+                                     status_cb=lambda t, pr=prefix: app.after(0, _render_status, t, pr),
                                      progress_cb=lambda v, i=idx: app.after(0, prog, v, i),
                                      seg_cb=lambda i, s: app.after(0, extra_seg, i, s))
                     outputs.append((fmt, out))
@@ -5661,6 +5805,17 @@ def do_render():
             app.after(0, lambda: _render_error(msg))
 
     threading.Thread(target=worker, daemon=True).start()
+
+
+def _render_status(t: str, prefix: str = ""):
+    """Statuszeile; beim Vorbereiten eines Clips steht der Fortschritt auch in der Zeile „Clips rendern“."""
+    ui_status(prefix + t)
+    head = tr("Clip wird vorbereitet: ")
+    if t.startswith(head):
+        r = _prog_find(render_prog, "clips")
+        if r is not None and r["state"] in ("wait", "run"):
+            pct = t.rsplit("·", 1)[1].strip() if "·" in t else ""
+            r["detail"] = (tr("vorbereiten") + " " + pct).strip()
 
 
 def _render_done(outputs, failed, version, rendered_plan, first, has_main=True):
@@ -6606,8 +6761,11 @@ def show_settings_menu(widget=None):
         look.add_radiobutton(label=tr(label), value=key, variable=appearance_var,
                              command=lambda k=key: set_appearance(k))
     menu.add_cascade(label=tr("Darstellung"), menu=look)
+    menu.add_command(label=tr("Cache leeren") + f"  ({_mb(_cache_size())})", command=clear_cache_clicked,
+                     state="disabled" if (render_busy or plan_busy) else "normal")
     menu.add_command(label=tr("Einstellungen zurücksetzen"), command=on_reset_clicked, state=busy_state)
     menu.add_separator()
+    menu.add_command(label=tr("Problem melden …"), command=create_problem_report)
     menu.add_command(label=tr("Mobile Version (GitHub)"), command=lambda: _open_url(MOBILE_URL))
     menu.add_command(label=tr("Über MVG …") + ("   ⬆" if UPDATE_INFO["state"] == "new" else ""),
                      command=open_about_dialog)
@@ -6894,6 +7052,206 @@ def open_license_window(parent=None):
         win.grab_set()
     except Exception:
         pass
+
+
+# ===================== Problem melden · Cache leeren =====================
+def _desktop_dir() -> Path:
+    """Desktop des Benutzers (auch wenn er von OneDrive umgeleitet ist); sonst der Output-Ordner."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(260)
+            if ctypes.windll.shell32.SHGetFolderPathW(None, 0x10, None, 0, buf) == 0 and Path(buf.value).is_dir():
+                return Path(buf.value)
+        except Exception:
+            pass
+    d = Path.home() / "Desktop"
+    return d if d.is_dir() else OUTPUT_DIR
+
+
+def _mb(n: float) -> str:
+    return f"{n / 1024 ** 3:.1f} GB" if n >= 1024 ** 3 else f"{n / 1024 ** 2:.0f} MB"
+
+
+def _report_info() -> str:
+    import platform
+    import time as _t
+    lines = ["Musik Video Generator " + APP_VERSION, "Erstellt: " + _t.strftime("%Y-%m-%d %H:%M:%S"), ""]
+    try:
+        lines.append("System: " + platform.platform() + " · " + platform.machine())
+    except Exception:
+        pass
+    lines.append(f"Prozessorkerne: {os.cpu_count()}")
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            class MS(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("sullAvailExtendedVirtual", ctypes.c_ulonglong)]
+            ms = MS()
+            ms.dwLength = ctypes.sizeof(MS)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms))
+            lines.append(f"Arbeitsspeicher: {_mb(ms.ullTotalPhys)} (frei {_mb(ms.ullAvailPhys)})")
+        except Exception:
+            pass
+    try:
+        du = shutil.disk_usage(BASE_DIR)
+        lines.append(f"Festplatte (Programmordner): frei {_mb(du.free)} von {_mb(du.total)}")
+    except Exception:
+        pass
+    lines.append("Programmordner: " + str(BASE_DIR))
+    try:
+        ff, lic = _ffmpeg_info()
+        lines.append("FFmpeg: " + ff + " (" + ffmpeg_cmd() + ")")
+    except Exception:
+        pass
+    lines.append(f"Sprache: {LANG} · Darstellung: {ctk.get_appearance_mode()}")
+    try:
+        lines.append(f"Bildschirm: {app.winfo_screenwidth()}×{app.winfo_screenheight()} · Fenster: {app.winfo_width()}×{app.winfo_height()}")
+    except Exception:
+        pass
+    lines.append(f"Cache: {_mb(_cache_size())}")
+    lines += ["", f"Schritt: {current_step} · Render läuft: {render_busy} · Planung läuft: {plan_busy}"]
+    if render_failed:
+        lines.append("Letzter Renderfehler: " + str(render_failed))
+    if plan_error:
+        lines.append("Letzter Planungsfehler: " + str(plan_error))
+    try:
+        fm = [k for k, v in format_vars.items() if v.get()]
+        lines.append(f"Formate: {', '.join(fm)} · Schnitt: {speed_var.get() or 'ganzer Clip'}")
+    except Exception:
+        pass
+    if music_file:
+        lines.append(f"Musik: {Path(music_file).name} · {fmt_time(music_dur)}")
+    lines += ["", f"Auswahl ({len(selection)} Einträge):"]
+    for it in selection[:40]:
+        p = Path(it["path"])
+        desc = f"  {it['kind']}: {p.name}"
+        try:
+            desc += f" · {_mb(p.stat().st_size)}"
+            info = _json.loads(check_output_hidden([ffprobe_cmd(), "-v", "error", "-print_format", "json",
+                                                   "-show_streams", "-show_format", str(p)], timeout=20)
+                              .decode("utf-8", "replace"))
+            v = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
+            desc += (f" · {v.get('codec_name', '?')} {v.get('width', '?')}×{v.get('height', '?')}"
+                     f" · {v.get('avg_frame_rate', '?')} fps · {v.get('pix_fmt', '?')}"
+                     f" · {float(info.get('format', {}).get('duration') or 0):.1f} s")
+        except Exception as e:
+            desc += f" · (nicht lesbar: {e.__class__.__name__})"
+        lines.append(desc)
+    if len(selection) > 40:
+        lines.append(f"  … und {len(selection) - 40} weitere")
+    return "\n".join(lines) + "\n"
+
+
+def create_problem_report():
+    """Packt Protokolle und technische Angaben in eine ZIP-Datei auf dem Desktop."""
+    ui_status(tr("Fehlerbericht wird erstellt …"))
+
+    def worker():
+        import time as _t
+        import zipfile
+        try:
+            info = _report_info()
+            target = _desktop_dir() / f"MVG_{tr('Fehlerbericht').replace(' ', '_')}_{_t.strftime('%Y-%m-%d_%H%M')}.zip"
+            base = _log_dir()
+            with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
+                z.writestr("info.txt", info)
+                for n_ in ("mvg_error.log", "mvg_start.log", "mvg_start_vorher.log", "mvg_ffmpeg.log",
+                           "mvg_ffmpeg_vorher.log", "mvg_settings.json"):
+                    f = base / n_
+                    if f.exists():
+                        z.write(f, n_)
+            app.after(0, _report_done, target, None)
+        except Exception as e:
+            app.after(0, _report_done, None, str(e))
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _report_done(target, err):
+    if err or target is None:
+        ui_status(tr("Fehlerbericht konnte nicht erstellt werden"))
+        messagebox.showerror(tr("Problem melden"), tr("Der Fehlerbericht konnte nicht erstellt werden.") + "\n\n" + str(err))
+        return
+    ui_status(tr("Fehlerbericht gespeichert: ") + target.name)
+    w = ctk.CTkToplevel(app)
+    w.title(tr("Problem melden"))
+    w.transient(app)
+    w.resizable(False, False)
+    w.configure(fg_color=C_BG)
+    c = card(w)
+    c.pack(fill="both", expand=True, padx=14, pady=14)
+    ctk.CTkLabel(c, text="✓  " + tr("Fehlerbericht erstellt"), font=F(16, True), text_color=C_OK,
+                 anchor="w").pack(fill="x", padx=22, pady=(18, 4))
+    ctk.CTkLabel(c, text=tr("Die Datei liegt auf deinem Desktop:") + "\n" + target.name + "\n\n" +
+                 tr("Schick sie an den Entwickler – oder melde den Fehler auf GitHub."),
+                 font=F(12), text_color=C_TEXT, anchor="w", justify="left", wraplength=440).pack(fill="x", padx=22, pady=(4, 0))
+    bt = ctk.CTkFrame(c, fg_color="transparent")
+    bt.pack(fill="x", padx=22, pady=(18, 18))
+
+    def github():
+        from urllib.parse import quote
+        body = tr("Was ist passiert?") + "\n\n\n" + tr("MVG-Version: ") + APP_VERSION + "\n\n" + \
+            tr("(Bitte die ZIP-Datei vom Desktop hier hineinziehen.)")
+        _open_url(ISSUES_URL + "/new?title=" + quote(tr("Fehlerbericht")) + "&body=" + quote(body))
+        open_path_portable(target.parent)
+
+    btn_primary(bt, "OK", w.destroy, width=90, height=34).pack(side="right")
+    btn_secondary(bt, tr("Auf GitHub melden"), github, width=160).pack(side="right", padx=8)
+    w.bind("<Escape>", lambda _e: w.destroy())
+    try:
+        w.update_idletasks()
+        w_, h_ = 500, w.winfo_reqheight()
+        w.geometry(f"{w_}x{h_}+{app.winfo_rootx() + (app.winfo_width() - w_) // 2}+{app.winfo_rooty() + 120}")
+        w.grab_set()
+    except Exception:
+        pass
+
+
+def _cache_size() -> int:
+    total = 0
+    for folder in (CACHE_DIR, SEGMENTS_DIR, THUMB_DIR):
+        try:
+            for f in folder.glob("*"):
+                if f.is_file():
+                    total += f.stat().st_size
+        except Exception:
+            pass
+    return total
+
+
+def clear_cache_clicked():
+    if render_busy or plan_busy:
+        ui_status(tr("Während des Renderns nicht möglich"))
+        return
+    size = _cache_size()
+    if size <= 0:
+        messagebox.showinfo(tr("Cache leeren"), tr("Der Cache ist bereits leer."))
+        return
+    if not messagebox.askokcancel(tr("Cache leeren"), tr(
+            "Der Cache belegt {size}. Darin liegen nur Zwischendateien, die das Programm jederzeit neu erstellen kann.\n\n"
+            "Deine Videos, Clips, Fotos und Einstellungen bleiben erhalten. Das nächste Rendern dauert etwas länger.\n\nJetzt leeren?").format(size=_mb(size))):
+        return
+    freed = 0
+    for folder in (CACHE_DIR, SEGMENTS_DIR, THUMB_DIR):
+        for f in list(folder.glob("*")):
+            try:
+                if f.is_file():
+                    sz = f.stat().st_size
+                    f.unlink()
+                    freed += sz
+            except Exception:
+                pass
+    try:
+        POOL_THUMB_CACHE.clear()
+    except Exception:
+        pass
+    ui_status(tr("Cache geleert: {size} frei").format(size=_mb(freed)))
 
 
 def on_reset_clicked():
@@ -7979,6 +8337,38 @@ _HELP_V53 = {
 for _L, _topics in _HELP_V53.items():
     HELP_TOPICS[_L].update(_topics)
 
+# 4.1: Cache leeren, Problem melden, Vorbereiten großer Clips
+for _L, (_reset, _mobile, _cache, _report) in {
+    "de": ("• Einstellungen zurücksetzen:", "• Mobile Version:",
+           "• Cache leeren: löscht die Zwischendateien des Programms (die Größe steht dahinter). Normalerweise nicht nötig – das Programm räumt selbst auf. Hilfreich, wenn die Festplatte voll ist oder etwas nicht stimmt. Videos, Clips und Einstellungen bleiben erhalten.\n",
+           "• Problem melden: legt einen Fehlerbericht als ZIP-Datei auf deinen Desktop, den du dem Entwickler schicken kannst.\n"),
+    "en": ("• Reset settings:", "• Mobile version:",
+           "• Empty cache: deletes the program's temporary files (the size is shown next to it). Normally not needed – the program tidies up by itself. Useful when the disk is full or something seems wrong. Videos, clips and settings are kept.\n",
+           "• Report a problem: puts an error report as a ZIP file on your desktop that you can send to the developer.\n"),
+    "es": ("• Restablecer ajustes:", "• Versión móvil:",
+           "• Vaciar caché: borra los archivos intermedios del programa (al lado se ve el tamaño). Normalmente no hace falta: el programa limpia solo. Útil si el disco está lleno o algo no va bien. Vídeos, clips y ajustes se conservan.\n",
+           "• Informar de un problema: guarda en tu escritorio un informe de error en un archivo ZIP que puedes enviar al desarrollador.\n"),
+}.items():
+    _t, _b = HELP_TOPICS[_L]["help"]
+    if _reset in _b:
+        _b = _b.replace(_reset, _cache + _reset, 1)
+    if _mobile in _b:
+        _b = _b.replace(_mobile, _report + _mobile, 1)
+    HELP_TOPICS[_L]["help"] = (_t, _b)
+
+_HELP_V54 = {
+ "de": {"report": ("Problem melden", "Erstellt einen Fehlerbericht: eine ZIP-Datei auf deinem Desktop mit den Protokollen des Programms und technischen Angaben (Windows-Version, Arbeitsspeicher, freier Platz, FFmpeg-Version, Namen und Formate deiner ausgewählten Clips).\n\nKennst du den Entwickler, schick ihm die Datei direkt, zum Beispiel per WhatsApp. Sonst öffnet „Auf GitHub melden“ die Seite für Fehlermeldungen und den Ordner mit der Datei: kurz beschreiben, was passiert ist, und die ZIP-Datei in das Textfeld ziehen (kostenloses GitHub-Konto nötig). Damit lässt sich meist schnell erkennen, woran es lag.\n\nEnthalten sind keine Videos, Fotos oder Musik. Der Bericht enthält auch die Protokolle der vorigen Sitzung – du kannst ihn also auch nach einem Neustart noch erstellen.")},
+ "en": {"report": ("Report a problem", "Creates an error report: a ZIP file on your desktop with the program's logs and technical details (Windows version, memory, free space, FFmpeg version, names and formats of your selected clips).\n\nIf you know the developer, send him the file directly, for example by WhatsApp. Otherwise “Report on GitHub” opens the bug report page and the folder with the file: briefly describe what happened and drag the ZIP file into the text field (free GitHub account needed). It usually shows quickly what went wrong.\n\nNo videos, photos or music are included. The report also contains the logs of the previous session – so you can still create it after a restart.")},
+ "es": {"report": ("Informar de un problema", "Crea un informe de error: un archivo ZIP en tu escritorio con los registros del programa y datos técnicos (versión de Windows, memoria, espacio libre, versión de FFmpeg, nombres y formatos de los clips seleccionados).\n\nSi conoces al desarrollador, envíale el archivo directamente, por ejemplo por WhatsApp. Si no, «Informar en GitHub» abre la página de informes de error y la carpeta con el archivo: describe brevemente qué ha pasado y arrastra el archivo ZIP al campo de texto (hace falta una cuenta gratuita de GitHub). Normalmente permite ver enseguida qué ha fallado.\n\nNo incluye vídeos, fotos ni música. El informe también contiene los registros de la sesión anterior, así que puedes crearlo incluso después de reiniciar.")},
+}
+for _L, _topics in _HELP_V54.items():
+    HELP_TOPICS[_L].update(_topics)
+for _L, _a in (("de", "\n\nClip wird vorbereitet: Videos in besonderen Formaten (z. B. 4K oder HEVC vom Handy) bereitet das Programm beim ersten Mal einmalig vor. Das kann bei großen Clips einige Minuten dauern; in der Zeile „Clips rendern“ und unten in der Statuszeile siehst du den Fortschritt in Prozent. Beim nächsten Video geht es dann sofort."),
+               ("en", "\n\nPreparing clip: videos in special formats (e.g. 4K or HEVC from a phone) are prepared once the first time. With large clips this can take a few minutes; the “Render clips” row and the status line show the progress in percent. The next video then goes straight away."),
+               ("es", "\n\nPreparando clip: los vídeos en formatos especiales (p. ej. 4K o HEVC del móvil) se preparan una sola vez la primera vez. Con clips grandes puede tardar unos minutos; en la fila «Renderizar clips» y en la línea de estado ves el avance en porcentaje. En el siguiente vídeo ya va al instante.")):
+    _t, _b = HELP_TOPICS[_L]["render_progress"]
+    HELP_TOPICS[_L]["render_progress"] = (_t, _b + _a)
+
 
 # ── Übersetzungen der v4.0-Oberfläche: deutscher Text -> (English, Español)
 _TR_V4 = {
@@ -8382,6 +8772,52 @@ _TR_V50 = {
     "Copia el enlace de un vídeo de YouTube (p. ej. de la barra de direcciones del navegador) y elige de nuevo «Short desde URL»."),
 }
 for _de, (_en, _es) in _TR_V50.items():
+    TRANSLATIONS["en"].setdefault(_de, _en)
+    TRANSLATIONS["es"].setdefault(_de, _es)
+
+# ── 4.1: Problem melden, Cache leeren, Vorbereiten, Hänger-Wächter
+_TR_V51 = {
+ "Cache geleert: {size} frei": ("Cache emptied: {size} freed", "Caché vaciada: {size} liberados"),
+ "Cache leeren": ("Empty cache", "Vaciar caché"),
+ "Clip wird vorbereitet: ": ("Preparing clip: ", "Preparando clip: "),
+ "Der Cache belegt {size}. Darin liegen nur Zwischendateien, die das Programm jederzeit neu erstellen kann.\n\nDeine Videos, Clips, Fotos und Einstellungen bleiben erhalten. Das nächste Rendern dauert etwas länger.\n\nJetzt leeren?": (
+    "The cache takes up {size}. It only holds temporary files the program can recreate at any time.\n\nYour videos, clips, photos and settings are kept. The next render takes a little longer.\n\nEmpty it now?",
+    "La caché ocupa {size}. Solo contiene archivos intermedios que el programa puede volver a crear en cualquier momento.\n\nTus vídeos, clips, fotos y ajustes se conservan. El próximo renderizado tardará un poco más.\n\n¿Vaciarla ahora?"),
+ "Der Cache ist bereits leer.": ("The cache is already empty.", "La caché ya está vacía."),
+ "Der Fehlerbericht konnte nicht erstellt werden.": ("The error report could not be created.", "No se pudo crear el informe de error."),
+ "Der Fehlerbericht liegt auf deinem Desktop:": ("The error report is on your desktop:", "El informe de error está en tu escritorio:"),
+ "Enthalten sind nur Protokolle, Dateinamen und technische Angaben – keine Videos, Fotos oder Musik.": (
+    "It only contains logs, file names and technical details – no videos, photos or music.",
+    "Solo contiene registros, nombres de archivo y datos técnicos; ningún vídeo, foto ni música."),
+ "Fehlerbericht gespeichert: ": ("Error report saved: ", "Informe de error guardado: "),
+ "Fehlerbericht konnte nicht erstellt werden": ("Error report could not be created", "No se pudo crear el informe de error"),
+ "Fehlerbericht wird erstellt …": ("Creating error report …", "Creando informe de error …"),
+ "Ordner jetzt öffnen?": ("Open the folder now?", "¿Abrir la carpeta ahora?"),
+ "Problem melden": ("Report a problem", "Informar de un problema"),
+ "Problem melden …": ("Report a problem …", "Informar de un problema …"),
+ "Schick diese Datei an den Entwickler – zum Beispiel per E-Mail oder WhatsApp, oder hänge sie an eine Fehlermeldung auf GitHub an.": (
+    "Send this file to the developer – for example by e-mail or WhatsApp, or attach it to a bug report on GitHub.",
+    "Envía este archivo al desarrollador, por ejemplo por correo o WhatsApp, o adjúntalo a un informe de error en GitHub."),
+ "ffmpeg reagiert seit {n} Minuten nicht mehr und wurde abgebrochen. Bitte über ⚙ → Problem melden einen Fehlerbericht erstellen.": (
+    "ffmpeg has not responded for {n} minutes and was stopped. Please create an error report via ⚙ → Report a problem.",
+    "ffmpeg no responde desde hace {n} minutos y se ha detenido. Crea un informe de error en ⚙ → Informar de un problema."),
+ "vorbereiten": ("preparing", "preparando"),
+ "Fehlerbericht erstellt": ("Error report created", "Informe de error creado"),
+ "Die Datei liegt auf deinem Desktop:": ("The file is on your desktop:", "El archivo está en tu escritorio:"),
+ "Schick sie an den Entwickler – oder melde den Fehler auf GitHub.": ("Send it to the developer – or report the problem on GitHub.", "Envíaselo al desarrollador o informa del problema en GitHub."),
+ "Fehlerbericht": ("Error report", "Informe de error"),
+ "Auf GitHub melden": ("Report on GitHub", "Informar en GitHub"),
+ "Was ist passiert?": ("What happened?", "¿Qué ha pasado?"),
+ "MVG-Version: ": ("MVG version: ", "Versión de MVG: "),
+ "(Bitte die ZIP-Datei vom Desktop hier hineinziehen.)": ("(Please drag the ZIP file from your desktop into this field.)", "(Arrastra aquí el archivo ZIP de tu escritorio.)"),
+ "Wenn du den Entwickler kennst, schick ihm die Datei einfach direkt – zum Beispiel per WhatsApp oder E-Mail.": (
+    "If you know the developer, simply send him the file directly – for example by WhatsApp or e-mail.",
+    "Si conoces al desarrollador, envíale el archivo directamente, por ejemplo por WhatsApp o correo."),
+ "Sonst: „Auf GitHub melden“ öffnet die Seite für Fehlermeldungen und den Ordner mit der Datei. Beschreib kurz, was passiert ist, und zieh die ZIP-Datei in das Textfeld (dafür brauchst du ein kostenloses GitHub-Konto).": (
+    "Otherwise: “Report on GitHub” opens the bug report page and the folder with the file. Briefly describe what happened and drag the ZIP file into the text field (you need a free GitHub account for this).",
+    "Si no: «Informar en GitHub» abre la página de informes de error y la carpeta con el archivo. Describe brevemente qué ha pasado y arrastra el archivo ZIP al campo de texto (necesitas una cuenta gratuita de GitHub)."),
+}
+for _de, (_en, _es) in _TR_V51.items():
     TRANSLATIONS["en"].setdefault(_de, _en)
     TRANSLATIONS["es"].setdefault(_de, _es)
 

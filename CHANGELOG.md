@@ -1,5 +1,22 @@
 # Changelog — Musik Video Generator
 
+## v4.1
+
+**Neu**
+
+- **Problem melden:** ⚙ → „Problem melden …“ (und ein Knopf direkt bei Fehlermeldungen) legt einen Fehlerbericht als ZIP-Datei auf den Desktop: Protokolle der aktuellen und der vorigen Sitzung, Windows-Version, Arbeitsspeicher, freier Platz, FFmpeg-Version sowie Namen und Formate der ausgewählten Clips. Keine Videos, Fotos oder Musik. Wer den Entwickler kennt, schickt die Datei direkt; sonst öffnet „Auf GitHub melden“ die Issues-Seite (mit vorausgefülltem Text) und den Ordner mit der Datei.
+- **Cache leeren** als eigener Eintrag im ⚙-Menü, mit Anzeige der Größe. Bisher war das nur über „Einstellungen zurücksetzen“ erreichbar.
+- **Fortschritt beim Vorbereiten:** Clips in besonderen Formaten (z. B. 4K/HEVC vom Handy) zeigen beim ersten Rendern „vorbereiten 35 %“, statt scheinbar stillzustehen.
+
+**Verbessert**
+
+- **Schutz gegen Hänger:** Jeder ffmpeg-Schritt wird überwacht. Tut sich 5 Minuten lang nichts, wird er mit einer klaren Meldung abgebrochen. ffmpeg bekommt kein offenes Eingabe- und Ausgabefenster mehr (`-nostdin`, Ausgaben ins Protokoll).
+- **Protokolle:** `mvg_start.log` hält jeden Render-Schritt mit Uhrzeit fest, `mvg_ffmpeg.log` die Ausgaben von ffmpeg. Die Protokolle der vorigen Sitzung bleiben als `…_vorher.log` erhalten.
+
+**Fehlerbehebung**
+
+- Ein abgebrochenes Vorbereiten eines Clips konnte eine unvollständige Datei im Cache hinterlassen, die beim nächsten Rendern Probleme machte. Vorbereitet wird jetzt in eine Zwischendatei; vorhandene unvollständige Dateien werden erkannt und neu erstellt.
+
 ## v4.0
 
 Die Bedienung wurde komplett neu aufgebaut. Statt eines großen Fensters mit vielen Optionen führt das Programm jetzt in fünf Schritten zum Video: **1 Start → 2 Bildmaterial → 3 Extras → 4 Schnitt → 5 Fertig**. Die Schrittleiste oben zeigt jederzeit, wo man steht; erledigte Schritte lassen sich direkt anklicken.
