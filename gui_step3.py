@@ -98,11 +98,46 @@ import shutil
 import tempfile
 from typing import Callable, Optional, Tuple
 
+_LOGS_READY = [None]
+LOG_NAMES = ("mvg_error.log", "mvg_start.log", "mvg_start_vorher.log", "mvg_ffmpeg.log", "mvg_ffmpeg_vorher.log")
+
+
+def _logs_dir() -> Path:
+    """Ordner logs/ neben der EXE. Beim ersten Aufruf werden alte Protokolle aus dem Programmordner hierher verschoben."""
+    if _LOGS_READY[0] is not None:
+        return _LOGS_READY[0]
+    base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+    d = base / "logs"
+    try:
+        d.mkdir(exist_ok=True)
+        for n_ in LOG_NAMES:
+            old = base / n_
+            if old.exists():
+                try:
+                    if (d / n_).exists():
+                        old.unlink()
+                    else:
+                        os.replace(old, d / n_)
+                except Exception:
+                    pass
+    except Exception:
+        d = base
+    _LOGS_READY[0] = d
+    return d
+
+
 # ── Fehlerprotokoll: Startfehler sichtbar machen (EXE ist "windowed" und würde sonst still scheitern)
 def _log_error(text: str, show: bool = False):
     try:
-        base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
-        with open(base / "mvg_error.log", "a", encoding="utf-8") as f:
+        f_ = _logs_dir() / "mvg_error.log"
+        try:
+            if f_.exists() and f_.stat().st_size > 1_000_000:      # nur die jüngsten Einträge behalten
+                tail = f_.read_bytes()[-500_000:]
+                cut = tail.find(b"--- ")
+                f_.write_bytes(tail[cut:] if cut >= 0 else tail)
+        except Exception:
+            pass
+        with open(f_, "a", encoding="utf-8") as f:
             import datetime as _dt
             f.write(f"--- {_dt.datetime.now():%Y-%m-%d %H:%M:%S} ---\n{text}\n")
     except Exception:
@@ -110,7 +145,7 @@ def _log_error(text: str, show: bool = False):
     if show:
         try:
             import tkinter.messagebox as _mb
-            _mb.showerror("Musik Video Generator", text[-1500:] + "\n\n(mvg_error.log)")
+            _mb.showerror("Musik Video Generator", text[-1500:] + "\n\n(logs/mvg_error.log)")
         except Exception:
             pass
 
@@ -118,7 +153,7 @@ def _log_error(text: str, show: bool = False):
 def _trace(msg: str):
     """Startphasen mitschreiben (mvg_start.log, wird bei jedem Start neu begonnen)."""
     try:
-        base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+        base = _logs_dir()
         mode = "w" if msg == "start" else "a"
         if msg == "start":
             for _n in ("mvg_start.log", "mvg_ffmpeg.log"):
@@ -164,7 +199,7 @@ _LOG_LOCK = threading.Lock()
 
 
 def _log_dir() -> Path:
-    return Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+    return _logs_dir()
 
 
 def _ffmpeg_log():
@@ -7161,11 +7196,12 @@ def create_problem_report():
             base = _log_dir()
             with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
                 z.writestr("info.txt", info)
-                for n_ in ("mvg_error.log", "mvg_start.log", "mvg_start_vorher.log", "mvg_ffmpeg.log",
-                           "mvg_ffmpeg_vorher.log", "mvg_settings.json"):
+                for n_ in LOG_NAMES:
                     f = base / n_
                     if f.exists():
                         z.write(f, n_)
+                if SETTINGS_FILE.exists():
+                    z.write(SETTINGS_FILE, SETTINGS_FILE.name)
             app.after(0, _report_done, target, None)
         except Exception as e:
             app.after(0, _report_done, None, str(e))
@@ -8037,7 +8073,7 @@ _HELP_V43 = {
   "page_done": ("Schritt 5 – Fertig", "Dein Video ist fertig. Links ist der Thumbnail-Generator (beim 16:9-Video): Das YouTube-Thumbnail wird automatisch im Ordner output/ gespeichert, „↻ Anderes Bild“ wählt ein anderes. Rechts stehen alle erstellten Dateien.\n\n• „▶ Video ansehen“ öffnet das Video im Player\n• „Output-Ordner“ öffnet den Ordner mit allen Dateien\n• „YouTube Upload“ öffnet die Upload-Seite im Browser\n• „✏ Clips ändern“ führt zurück zu Schritt 4\n• „＋ Neues Video“ beginnt mit neuer Musik und behält deine Einstellungen"),
   "back": ("Zurück", "Geht einen Schritt zurück. Alle Einstellungen und deine Auswahl bleiben dabei erhalten – du kannst jederzeit wieder nach vorn.\n\nÄnderst du nach dem Planen etwas Grundlegendes (Musik, Bildmaterial, Extras, Hauptformat oder Schnitt), wird die Clipfolge beim nächsten Mal neu geplant. Hast du schon sortiert oder gerendert, fragt das Programm vorher nach."),
   "next": ("Weiter", "Geht zum nächsten Schritt. Der Button ist erst aktiv, wenn alles Nötige erledigt ist: in Schritt 1 eine Musikdatei, in Schritt 2 mindestens ein Clip oder Foto. Fehlt noch etwas, steht der Hinweis unten in der Statuszeile."),
-  "retry": ("Erneut versuchen", "Startet den fehlgeschlagenen Vorgang noch einmal. Die Ursache steht direkt darüber in rot. Häufige Gründe: Eine Datei aus der Auswahl wurde verschoben oder gelöscht, ein Clip ist beschädigt, oder der Datenträger ist voll. Behebe die Ursache und versuche es erneut – oder geh mit „Zurück“ zu den vorigen Schritten. Details stehen außerdem in mvg_error.log im Programmordner."),
+  "retry": ("Erneut versuchen", "Startet den fehlgeschlagenen Vorgang noch einmal. Die Ursache steht direkt darüber in rot. Häufige Gründe: Eine Datei aus der Auswahl wurde verschoben oder gelöscht, ein Clip ist beschädigt, oder der Datenträger ist voll. Behebe die Ursache und versuche es erneut – oder geh mit „Zurück“ zu den vorigen Schritten. Details stehen außerdem in mvg_error.log im Ordner logs/ – oder du erstellst über „Problem melden“ einen Fehlerbericht."),
  },
  "en": {
   "header": ("Music Video Generator", "At the top left you see the program name and slogan (“Simply cut to the beat.”). The version number is shown in the window's title bar. On the right are the two help buttons:\n\n• “?” starts click help: then you click any area and get exactly this kind of explanation.\n• “⚙” opens the menu with quick guide, PDF manual, short from URL, folders, language, appearance (light/dark), reset and the links to updates and the mobile version."),
@@ -8050,7 +8086,7 @@ _HELP_V43 = {
   "page_done": ("Step 5 – Done", "Your video is finished. On the left is the thumbnail generator (for the 16:9 video): the YouTube thumbnail is saved automatically in the output/ folder, “↻ Other picture” picks another one. On the right are all created files.\n\n• “▶ Watch video” opens the video in the player\n• “Output folder” opens the folder with all files\n• “YouTube upload” opens the upload page in the browser\n• “✏ Change clips” takes you back to step 4\n• “＋ New video” starts with new music and keeps your settings"),
   "back": ("Back", "Goes back one step. All settings and your selection are kept – you can move forward again at any time.\n\nIf you change something fundamental after planning (music, footage, extras, main format or cutting), the clip order is re-planned next time. If you have already arranged or rendered, the program asks first."),
   "next": ("Next", "Goes to the next step. The button only becomes active once everything needed is done: in step 1 a music file, in step 2 at least one clip or photo. If something is missing, the hint is shown in the status line at the bottom."),
-  "retry": ("Try again", "Starts the failed process again. The cause is shown directly above in red. Common reasons: a file from the selection was moved or deleted, a clip is damaged, or the disk is full. Fix the cause and try again – or go back to earlier steps with “Back”. Details are also in mvg_error.log in the program folder."),
+  "retry": ("Try again", "Starts the failed process again. The cause is shown directly above in red. Common reasons: a file from the selection was moved or deleted, a clip is damaged, or the disk is full. Fix the cause and try again – or go back to earlier steps with “Back”. Details are also in mvg_error.log in the logs/ folder – or create an error report with “Report a problem”."),
  },
  "es": {
   "header": ("Generador de vídeos musicales", "Arriba a la izquierda ves el nombre del programa y el eslogan («Simply cut to the beat.»). El número de versión aparece en la barra de título de la ventana. A la derecha están los dos botones de ayuda:\n\n• «?» inicia la ayuda con clic: después haces clic en cualquier zona y recibes justo este tipo de explicación.\n• «⚙» abre el menú con guía rápida, manual PDF, short desde URL, carpetas, idioma, apariencia (claro/oscuro), restablecer y los enlaces a actualizaciones y a la versión móvil."),
@@ -8063,7 +8099,7 @@ _HELP_V43 = {
   "page_done": ("Paso 5 – Listo", "Tu vídeo está terminado. A la izquierda está el generador de miniaturas (en el vídeo 16:9): la miniatura de YouTube se guarda automáticamente en la carpeta output/ y «↻ Otra imagen» elige otra. A la derecha están todos los archivos creados.\n\n• «▶ Ver vídeo» abre el vídeo en el reproductor\n• «Carpeta de salida» abre la carpeta con todos los archivos\n• «Subir a YouTube» abre la página de subida en el navegador\n• «✏ Cambiar clips» te lleva de vuelta al paso 4\n• «＋ Nuevo vídeo» empieza con música nueva y conserva tus ajustes"),
   "back": ("Atrás", "Retrocede un paso. Todos los ajustes y tu selección se conservan; puedes volver a avanzar cuando quieras.\n\nSi después de planificar cambias algo básico (música, material, extras, formato principal o corte), el orden de clips se vuelve a planificar la próxima vez. Si ya has ordenado o renderizado, el programa pregunta antes."),
   "next": ("Siguiente", "Pasa al siguiente paso. El botón solo se activa cuando todo lo necesario está hecho: en el paso 1 un archivo de música, en el paso 2 al menos un clip o una foto. Si falta algo, el aviso aparece abajo en la línea de estado."),
-  "retry": ("Intentar de nuevo", "Vuelve a iniciar el proceso que falló. La causa aparece justo encima en rojo. Motivos frecuentes: un archivo de la selección se movió o se borró, un clip está dañado o el disco está lleno. Corrige la causa e inténtalo de nuevo, o vuelve a los pasos anteriores con «Atrás». Los detalles también están en mvg_error.log en la carpeta del programa."),
+  "retry": ("Intentar de nuevo", "Vuelve a iniciar el proceso que falló. La causa aparece justo encima en rojo. Motivos frecuentes: un archivo de la selección se movió o se borró, un clip está dañado o el disco está lleno. Corrige la causa e inténtalo de nuevo, o vuelve a los pasos anteriores con «Atrás». Los detalles también están en mvg_error.log en la carpeta logs/, o crea un informe de error con «Informar de un problema»."),
  },
 }
 for _L, _topics in _HELP_V43.items():

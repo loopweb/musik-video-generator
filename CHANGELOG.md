@@ -11,7 +11,7 @@
 **Verbessert**
 
 - **Schutz gegen Hänger:** Jeder ffmpeg-Schritt wird überwacht. Tut sich 5 Minuten lang nichts, wird er mit einer klaren Meldung abgebrochen. ffmpeg bekommt kein offenes Eingabe- und Ausgabefenster mehr (`-nostdin`, Ausgaben ins Protokoll).
-- **Protokolle:** `mvg_start.log` hält jeden Render-Schritt mit Uhrzeit fest, `mvg_ffmpeg.log` die Ausgaben von ffmpeg. Die Protokolle der vorigen Sitzung bleiben als `…_vorher.log` erhalten.
+- **Protokolle:** `mvg_start.log` hält jeden Render-Schritt mit Uhrzeit fest, `mvg_ffmpeg.log` die Ausgaben von ffmpeg. Die Protokolle der vorigen Sitzung bleiben als `…_vorher.log` erhalten. Alle Protokolle liegen jetzt übersichtlich im Ordner `logs/` (alte werden beim ersten Start dorthin verschoben); vom Fehlerprotokoll bleiben nur die jüngsten Einträge (höchstens ca. 1 MB).
 
 **Fehlerbehebung**
 

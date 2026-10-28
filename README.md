@@ -112,9 +112,10 @@ Die Homepage liegt im Ordner `docs/` und wird über GitHub Pages veröffentlicht
 | `output/` | Fertige Videos und YouTube-Thumbnails |
 | `manual/` | Die drei PDF-Anleitungen (werden beim Start aus der EXE hierher kopiert) |
 | `logo/` | Eigene Logos für den Thumbnail-Editor; zu Beginn liegt das MVG-Logo darin |
+| `logs/` | Protokolle (Fehler, Ablauf, FFmpeg) – werden automatisch klein gehalten |
 | `cache/` | Normalisierungs-, Segment- und Vorschaubild-Cache (automatisch verwaltet) |
 
-Alle Ordner werden beim ersten Programmstart automatisch angelegt. Einstellungen stehen in `mvg_settings.json`, Fehler in `mvg_error.log` (beides neben der EXE).
+Alle Ordner werden beim ersten Programmstart automatisch angelegt. Einstellungen stehen in `mvg_settings.json` neben der EXE, die Protokolle im Ordner `logs/`. Für einen Fehlerbericht: ⚙ → Problem melden.
 
 ## Tech-Stack
 
