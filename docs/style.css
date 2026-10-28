@@ -202,3 +202,10 @@ main > section { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
   .video-label { font-size: 17px; }
   .video-note { display: none; }
 }
+
+/* Handy: oben rechts MVG Mobil statt Download (die Windows-Version läuft dort ohnehin nicht) */
+.only-mobile { display: none !important; }
+@media (max-width: 640px) {
+  .only-desktop { display: none !important; }
+  .only-mobile { display: inline-block !important; }
+}
