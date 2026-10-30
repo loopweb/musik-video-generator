@@ -4689,6 +4689,17 @@ def _planning_done(p, sig, err):
         ui_status(tr("Clipfolge geplant: {n} Schnitte").format(n=len(p["slots"])))
     if current_step == 4:
         refresh_page()
+    if _auto_run[0]:                       # Vollautomatik: gleich weiter zum Rendern
+        if err:
+            _auto_run[0] = False
+        else:
+            app.after(500, _auto_render)
+
+
+def _auto_render():
+    _auto_run[0] = False
+    if plan is not None and not render_busy:
+        do_render()
 
 
 # ── Vorschaubilder der Kacheln (Bild aus dem Originalclip an der geplanten Stelle)
@@ -6828,6 +6839,8 @@ def show_settings_menu(widget=None):
     menu.add_separator()
     menu.add_command(label=tr("Short per URL (Zwischenablage)") + ("  …" if _url_short_busy else ""),
                      command=on_short_url_click)
+    menu.add_command(label="⚡ " + tr("Vollautomatik") + f"  ({AUTO_CLIPS} " + tr("Pool-Clips") + ")",
+                     command=full_auto_clicked, state=busy_state)
     menu.add_command(label=tr("Pool-Ordner öffnen"), command=lambda: open_path_portable(POOL_DIR))
     menu.add_command(label=tr("Output-Ordner"), command=open_output_folder)
     menu.add_separator()
@@ -7329,6 +7342,59 @@ def clear_cache_clicked():
     except Exception:
         pass
     ui_status(tr("Cache geleert: {size} frei").format(size=_mb(freed)))
+
+
+# ===================== Vollautomatik =====================
+_auto_run = [False]
+AUTO_CLIPS = 10
+
+
+def _auto_hint(pool_empty: bool):
+    w = ctk.CTkToplevel(app)
+    w.title(tr("Vollautomatik"))
+    w.transient(app)
+    w.resizable(False, False)
+    w.configure(fg_color=C_BG)
+    c = card(w)
+    c.pack(fill="both", expand=True, padx=14, pady=14)
+    ctk.CTkLabel(c, text="⚡  " + tr("Vollautomatik"), font=F(16, True), text_color=C_TEXT, anchor="w").pack(fill="x", padx=22, pady=(18, 4))
+    ctk.CTkLabel(c, text=tr("Um diese Funktion zu nutzen, wähle in Schritt 1 ein Musikstück und lege ein paar Clips in den Clip-Pool-Ordner."),
+                 font=F(12), text_color=C_TEXT, anchor="w", justify="left", wraplength=380).pack(fill="x", padx=22)
+    bt = ctk.CTkFrame(c, fg_color="transparent")
+    bt.pack(fill="x", padx=22, pady=(18, 18))
+    btn_primary(bt, "OK", w.destroy, width=90, height=34).pack(side="right")
+    if pool_empty:
+        btn_secondary(bt, tr("Pool-Ordner öffnen"), lambda: (open_path_portable(POOL_DIR), w.destroy()),
+                      width=160).pack(side="right", padx=8)
+    w.bind("<Escape>", lambda _e: w.destroy())
+    try:
+        w.update_idletasks()
+        w_, h_ = 470, w.winfo_reqheight()
+        w.geometry(f"{w_}x{h_}+{app.winfo_rootx() + (app.winfo_width() - w_) // 2}+{app.winfo_rooty() + 140}")
+        w.grab_set()
+    except Exception:
+        pass
+
+
+def full_auto_clicked():
+    """⚙ → Vollautomatik: zufällige Clips aus dem Pool, planen, rendern, Fertig-Seite."""
+    if render_busy or plan_busy:
+        ui_status(tr("Während des Renderns nicht möglich"))
+        return
+    files = pool_files()
+    if not music_file or not files:
+        _auto_hint(pool_empty=not files)
+        return
+    if selection and not messagebox.askyesno(tr("Vollautomatik"),
+                                             tr("Deine bisherige Auswahl an Clips und Fotos wird durch zufällige Clips aus dem Pool ersetzt. Weiter?")):
+        return
+    pick = random.sample(files, min(AUTO_CLIPS, len(files)))
+    selection[:] = [{"kind": "photo" if p_.suffix.lower() in IMAGE_EXTS else "video", "path": p_} for p_ in pick]
+    queue_sel_thumbs()
+    _forget_plan()
+    _auto_run[0] = True
+    ui_status(tr("Vollautomatik: {n} zufällige Clips aus dem Pool").format(n=len(pick)))
+    enter_step4()
 
 
 def on_reset_clicked():
@@ -8456,6 +8522,17 @@ for _L, _a in (("de", "\n\nAuswahl: Liegen mehrere Videos im Ordner, erscheint d
             _t, _b = HELP_TOPICS[_L][_k]
             HELP_TOPICS[_L][_k] = (_t, _b + _a)
 
+# Vollautomatik im ⚙-Menü
+for _L, (_after, _txt) in {
+    "de": ("• Pool-Ordner öffnen", "• Vollautomatik: Abkürzung für Eilige. Ist ein Musikstück gewählt, nimmt das Programm 10 zufällige Clips aus dem Pool, plant die Clipfolge, rendert sofort und zeigt am Ende die Fertig-Seite. Formate, Extras und Schnitt kommen aus den aktuellen Einstellungen; leere Intro-/Outro-Ordner werden übersprungen. Eine vorhandene Auswahl wird nach Rückfrage ersetzt. Danach kannst du wie gewohnt einzelne Clips ändern.\n"),
+    "en": ("• Open pool folder", "• Full auto: a shortcut for when you are in a hurry. If a piece of music is chosen, the program takes 10 random clips from the pool, plans the clip order, renders straight away and shows the Done page at the end. Formats, extras and cutting come from the current settings; empty intro/outro folders are skipped. An existing selection is replaced after asking. Afterwards you can change single clips as usual.\n"),
+    "es": ("• Abrir carpeta del grupo", "• Automático total: un atajo para cuando hay prisa. Si hay una canción elegida, el programa toma 10 clips aleatorios del grupo, planifica el orden, renderiza al momento y al final muestra la página Listo. Formatos, extras y corte se toman de los ajustes actuales; las carpetas de intro/outro vacías se omiten. Una selección existente se sustituye tras preguntar. Después puedes cambiar clips sueltos como siempre.\n"),
+}.items():
+    _t, _b = HELP_TOPICS[_L]["help"]
+    if _after in _b and "Vollautomatik" not in _b and "Full auto" not in _b and "Automático total" not in _b:
+        _b = _b.replace(_after, _txt + _after, 1)
+    HELP_TOPICS[_L]["help"] = (_t, _b)
+
 
 # ── Übersetzungen der v4.0-Oberfläche: deutscher Text -> (English, Español)
 _TR_V4 = {
@@ -8890,6 +8967,15 @@ _TR_V51 = {
     "ffmpeg no responde desde hace {n} minutos y se ha detenido. Crea un informe de error en ⚙ → Informar de un problema."),
  "vorbereiten": ("preparing", "preparando"),
  "Zufällig": ("Random", "Aleatorio"),
+ "Vollautomatik": ("Full auto", "Automático total"),
+ "Pool-Clips": ("pool clips", "clips del grupo"),
+ "Um diese Funktion zu nutzen, wähle in Schritt 1 ein Musikstück und lege ein paar Clips in den Clip-Pool-Ordner.": (
+    "To use this function, choose a piece of music in step 1 and put a few clips into the clip pool folder.",
+    "Para usar esta función, elige una canción en el paso 1 y pon algunos clips en la carpeta del grupo de clips."),
+ "Deine bisherige Auswahl an Clips und Fotos wird durch zufällige Clips aus dem Pool ersetzt. Weiter?": (
+    "Your current selection of clips and photos will be replaced by random clips from the pool. Continue?",
+    "Tu selección actual de clips y fotos se sustituirá por clips aleatorios del grupo. ¿Continuar?"),
+ "Vollautomatik: {n} zufällige Clips aus dem Pool": ("Full auto: {n} random clips from the pool", "Automático total: {n} clips aleatorios del grupo"),
  "{n} Dateien": ("{n} files", "{n} archivos"),
  "Fehlerbericht erstellt": ("Error report created", "Informe de error creado"),
  "Die Datei liegt auf deinem Desktop:": ("The file is on your desktop:", "El archivo está en tu escritorio:"),

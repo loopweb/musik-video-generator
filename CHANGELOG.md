@@ -4,6 +4,7 @@
 
 **Neu**
 
+- **Vollautomatik:** ⚙ → „⚡ Vollautomatik“ nimmt zur gewählten Musik 10 zufällige Clips aus dem Pool, plant, rendert und zeigt die Fertig-Seite. Ohne Musik oder bei leerem Pool erscheint ein kurzer Hinweis; eine vorhandene Auswahl wird nach Rückfrage ersetzt.
 - **Pre-Intro, Intro und Outro auswählen:** Liegen mehrere Videos im jeweiligen Ordner, erscheint in Schritt 3 neben dem Schalter ein Auswahlfeld – „Zufällig“ (wie bisher) oder ein bestimmtes Video. Die Wahl wird gemerkt; fehlt das Video später, gilt wieder „Zufällig“. Die Zusammenfassung zeigt das gewählte Video in Klammern.
 
 **Verbessert**
