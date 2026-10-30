@@ -4700,6 +4700,8 @@ def _auto_render():
     _auto_run[0] = False
     if plan is not None and not render_busy:
         do_render()
+        if not render_busy:                     # Rendern kam nicht in Gang (z. B. Einstellungen geändert)
+            ui_status(tr("Vollautomatik: bitte „Video erstellen“ klicken"))
 
 
 # ── Vorschaubilder der Kacheln (Bild aus dem Originalclip an der geplanten Stelle)
@@ -5229,8 +5231,12 @@ plan_prog: dict = {"rows": [], "complete": False, "fired": True, "on_complete": 
 # ── Seite
 def build_step4(parent):
     if plan_busy or (plan is None and not plan_error):
-        heading(parent, tr("Clipfolge wird geplant …"),
-                tr("Die Musik wird analysiert und die Schnitte werden auf den Beat gelegt. Das dauert nur einen Moment."))
+        if _auto_run[0]:
+            heading(parent, tr("Vollautomatik läuft …"),
+                    tr("Passende Clips werden ausgesucht, dann wird die Clipfolge geplant und das Video erstellt. Am Ende erscheint die Fertig-Seite."))
+        else:
+            heading(parent, tr("Clipfolge wird geplant …"),
+                    tr("Die Musik wird analysiert und die Schnitte werden auf den Beat gelegt. Das dauert nur einen Moment."))
         c = card(parent)
         c.pack(fill="x")
         if plan_prog.get("rows"):
@@ -5935,6 +5941,7 @@ def _render_done(outputs, failed, version, rendered_plan, first, has_main=True):
 def _render_error(msg: str):
     global render_busy, render_failed
     render_busy = False
+    _auto_run[0] = False
     render_failed = msg
     ui_status(tr("Fehler: ") + msg)
     refresh_page()
@@ -6842,7 +6849,7 @@ def show_settings_menu(widget=None):
     menu.add_command(label=tr("Short per URL (Zwischenablage)") + ("  …" if _url_short_busy else ""),
                      command=on_short_url_click)
     menu.add_command(label=tr("Vollautomatik") + f"  ({AUTO_CLIPS} " + tr("Pool-Clips") + ")",
-                     command=full_auto_clicked, state=busy_state)
+                     command=full_auto_clicked, state="normal" if _auto_run[0] else busy_state)
     menu.add_command(label=tr("Pool-Ordner öffnen"), command=lambda: open_path_portable(POOL_DIR))
     menu.add_command(label=tr("Output-Ordner"), command=open_output_folder)
     menu.add_separator()
@@ -7405,7 +7412,7 @@ def _clip_look(p: Path) -> Optional[dict]:
     else:
         dur = media_duration(p) or 0.0
         W, H = 64, 36
-        for f in (0.15, 0.35, 0.55, 0.75):
+        for f in (0.2, 0.5, 0.8):
             for dt in (0.0, 0.25):                 # Paare 0,25 s auseinander -> Bewegung
                 at = max(0.0, dur * f + dt)
                 try:
@@ -7537,7 +7544,11 @@ def _auto_hint(pool_empty: bool):
 
 
 def full_auto_clicked():
-    """⚙ → Vollautomatik: zufällige Clips aus dem Pool, planen, rendern, Fertig-Seite."""
+    """⚙ → Vollautomatik: passende Clips aus dem Pool, planen, rendern, Fertig-Seite."""
+    global plan_busy, plan_error
+    if _auto_run[0]:
+        go(4)                                   # läuft schon: Fortschritt zeigen
+        return
     if render_busy or plan_busy:
         ui_status(tr("Während des Renderns nicht möglich"))
         return
@@ -7549,33 +7560,68 @@ def full_auto_clicked():
                                              tr("Deine bisherige Auswahl an Clips und Fotos wird durch passende Clips aus dem Pool ersetzt. Weiter?")):
         return
     _auto_run[0] = True
-    ui_status(tr("Vollautomatik: passende Clips werden ausgesucht …"))
+    _auto_msg[0] = ""
+    _forget_plan()
+    plan_error = None
+    plan_busy = True                            # sperrt andere Aktionen, Schritt 4 zeigt den Fortschritt
+    plan_prog.clear()
+    plan_prog.update({"rows": [_prog_row("auto_song", "Song anhören", tr("Ruhig, ausgeglichen oder lebhaft?")),
+                               _prog_row("auto_clips", "Passende Clips aussuchen",
+                                         tr("Bild und Ordnername jedes Pool-Clips einschätzen"))],
+                      "complete": False, "fired": True, "on_complete": None})
+    go(4)
     mf = music_file
 
     def worker():
         try:
-            sm = song_mood(mf)
-        except Exception:
-            sm = 0.0
-        try:
-            pick, msg = pick_auto_clips(files, sm, min(AUTO_CLIPS, len(files)))
-        except Exception:
-            pick, msg = random.sample(files, min(AUTO_CLIPS, len(files))), ""
-        _trace(f"Vollautomatik: Song-Stimmung {sm:+.2f} · " + ", ".join(p_.name for p_ in pick))
-        app.after(0, _auto_start, pick, msg)
+            ui_call(lambda: _prog_start(plan_prog, "auto_song"))
+            try:
+                sm = song_mood(mf)
+            except Exception:
+                sm = 0.0
+            n = len(files)
+            done = [0]
+            ui_call(lambda: _prog_start(plan_prog, "auto_clips", frac=0.0, detail=f"0 / {n}"))
+
+            def one(f_):
+                try:
+                    clip_mood(f_)                # Ergebnis landet im Cache
+                finally:
+                    done[0] += 1
+                    r = _prog_find(plan_prog, "auto_clips")
+                    if r is not None:
+                        r["frac"] = done[0] / max(1, n)
+                        r["detail"] = f"{done[0]} / {n}"
+            with _Pool(max_workers=4) as ex:
+                list(ex.map(one, files))
+            try:
+                pick, msg = pick_auto_clips(files, sm, min(AUTO_CLIPS, len(files)))
+            except Exception:
+                pick, msg = random.sample(files, min(AUTO_CLIPS, len(files))), ""
+            _trace(f"Vollautomatik: Song-Stimmung {sm:+.2f} · " + ", ".join(p_.name for p_ in pick))
+            ui_call(lambda: _auto_start(pick, msg))
+        except Exception as e:
+            err = str(e)
+            ui_call(lambda: _auto_fail(err))
 
     threading.Thread(target=worker, daemon=True).start()
 
 
+def _auto_fail(err: str):
+    global plan_busy, plan_error
+    _auto_run[0] = False
+    plan_busy = False
+    plan_error = err
+    refresh_page()
+
+
 def _auto_start(pick, msg):
-    if render_busy or plan_busy:
-        _auto_run[0] = False
-        return
+    global plan_busy
+    plan_busy = False
     selection[:] = [{"kind": "photo" if p_.suffix.lower() in IMAGE_EXTS else "video", "path": p_} for p_ in pick]
     queue_sel_thumbs()
-    _forget_plan()
     _auto_msg[0] = msg
-    enter_step4()
+    start_planning()                            # danach rendert _planning_done automatisch weiter
     if msg:
         ui_status(msg)
 
@@ -9164,6 +9210,15 @@ _TR_V51 = {
  "ruhig": ("calm", "tranquila"),
  "lebhaft": ("lively", "animada"),
  "ausgeglichen": ("balanced", "equilibrada"),
+ "Song anhören": ("Listen to the song", "Escuchar la canción"),
+ "Ruhig, ausgeglichen oder lebhaft?": ("Calm, balanced or lively?", "¿Tranquila, equilibrada o animada?"),
+ "Passende Clips aussuchen": ("Choose matching clips", "Elegir clips adecuados"),
+ "Bild und Ordnername jedes Pool-Clips einschätzen": ("Judge the picture and folder name of each pool clip", "Valorar la imagen y el nombre de carpeta de cada clip del grupo"),
+ "Vollautomatik läuft …": ("Full auto running …", "Automático total en marcha …"),
+ "Passende Clips werden ausgesucht, dann wird die Clipfolge geplant und das Video erstellt. Am Ende erscheint die Fertig-Seite.": (
+    "Matching clips are being chosen, then the clip order is planned and the video created. The Done page appears at the end.",
+    "Se eligen clips adecuados, luego se planifica el orden y se crea el vídeo. Al final aparece la página Listo."),
+ "Vollautomatik: bitte „Video erstellen“ klicken": ("Full auto: please click “Create video”", "Automático total: pulsa «Crear vídeo»"),
  "Vollautomatik: {n} zufällige Clips aus dem Pool": ("Full auto: {n} random clips from the pool", "Automático total: {n} clips aleatorios del grupo"),
  "{n} Dateien": ("{n} files", "{n} archivos"),
  "Fehlerbericht erstellt": ("Error report created", "Informe de error creado"),

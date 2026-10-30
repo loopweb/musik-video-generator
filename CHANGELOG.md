@@ -5,6 +5,11 @@
 **Neu**
 
 - **Vollautomatik wählt passende Clips:** Statt wahllos aus dem ganzen Pool zu mischen, schätzt das Programm die Stimmung des Songs ein (Tempo, Energie, Dur/Moll) und jeden Clip nach Bild (Helligkeit, Farbe, Bewegung) und Ordnername („traurig“, „glücklich“, „Strand“ …). Genommen werden vor allem neutrale Szenen, dazu Clips passend zur Stimmung – traurige und fröhliche Clips werden nicht gemischt. Die Statuszeile zeigt, wie der Song eingeschätzt wurde. Die Clip-Einschätzung wird gespeichert, beim nächsten Mal geht es sofort.
+- **Vollautomatik sichtbar:** Nach dem Klick springt das Programm sofort zu Schritt 4 („Vollautomatik läuft …“) und zeigt die Arbeitsschritte mit Fortschritt – Song anhören, Clips aussuchen, planen, rendern – bis zur Fertig-Seite.
+
+**Fehlerbehebung**
+
+- Ein zweiter Klick auf „Vollautomatik“, während sie noch Clips aussuchte, brach den automatischen Durchlauf ab; das Programm blieb dann vor „Video erstellen“ stehen. Ein zweiter Klick zeigt jetzt nur den Fortschritt.
 
 ## v4.2
 
