@@ -1295,6 +1295,7 @@ def render_clip_segment(
     vf: str,
     frames: Optional[int] = None,
     start: float = 0.0,
+    motion_idx: int = 0,
 ) -> None:
     """Rendert EIN stummes Segment (Foto oder Video) im Zielformat, ab `start` Sekunden im Clip."""
     frames_args = ["-frames:v", str(int(frames))] if frames else []
@@ -1305,7 +1306,7 @@ def render_clip_segment(
             "-loop", "1",
             "-i", str(src),
             "-t", f"{seg_len:.4f}",
-            "-vf", vf,
+            "-vf", ken_burns_vf(src, vf, frames or max(1, round(seg_len * FPS)), motion_idx),
             "-an",
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-crf", "18", "-preset", "veryfast",
@@ -1328,6 +1329,69 @@ def render_clip_segment(
             "-fps_mode", "cfr",
         ] + frames_args + [str(out_seg)]
     run_hidden(cmd)
+
+
+KB_RATE = 0.025                   # ruhige Bewegung: 2,5 % Zoom/Schwenk pro Sekunde, für alle Songs gleich
+KB_MAX = 0.06                     # höchstens 6 % je Foto
+KB_MOTIONS = ("in", "lr", "out", "rl", "in_corner", "still", "out_corner")   # feste Folge, Fotos gehen der Reihe nach durch
+
+
+def ken_burns_vf(src: Path, vf: str, n_frames: int, motion_idx: int = 0) -> str:
+    """Fotos bewegen sich sanft (Ken Burns): langsam hinein-/herauszoomen oder seitlich schwenken.
+    Die Fotos eines Videos gehen der Reihe nach durch KB_MOTIONS, zwei gleiche Bewegungen folgen nie aufeinander."""
+    import re as _re
+    m = _re.search(r"(?:crop|pad)=(\d+):(\d+)", vf)
+    if not m:
+        return vf
+    W, H = int(m.group(1)), int(m.group(2))
+    padded = "pad=" in vf
+    try:
+        from PIL import Image as _Im
+        with _Im.open(src) as im:
+            pw, ph = im.size
+    except Exception:
+        return vf
+    if padded:                                     # 16:9: ganzes Foto sichtbar (ggf. mit Rand), Bewegung im Foto
+        f = min(W / pw, H / ph)
+    else:                                          # Hochformat: Bild füllt den Rahmen
+        f = max(W / pw, H / ph)
+    fw, fh = max(2, int(pw * f) // 2 * 2), max(2, int(ph * f) // 2 * 2)
+    if not padded:
+        fw, fh = W, H
+    N = max(1, int(n_frames) - 1)
+    motion = KB_MOTIONS[int(motion_idx) % len(KB_MOTIONS)]
+    amt = max(0.015, min(KB_MAX, KB_RATE * n_frames / FPS))    # Gesamtbewegung je nach Dauer
+    za = amt * 1.4                                              # Zoom etwas deutlicher ...
+    k = min(1.0, amt / 0.10) * 0.6                              # ... Schwenk etwas schwächer -> beide wirken gleich sanft
+    pz = f"(on/{N})"
+    cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+    rnd = random.Random(f"{src.name}|{motion_idx}")
+    dx, dy = rnd.choice((-1, 1)), rnd.choice((-1, 1))          # Ecke für die Eck-Varianten
+    if motion == "still":                                        # Ruhepause: kaum merklicher Zoom von 1 %
+        z, x, y = f"1+0.0100*{pz}", cx, cy
+    elif motion == "in":
+        z, x, y = f"1+{za:.4f}*{pz}", cx, cy
+    elif motion == "out":
+        z, x, y = f"{1 + za:.4f}-{za:.4f}*{pz}", cx, cy
+    elif motion == "lr":
+        z, x, y = "1.10", f"(iw-iw/zoom)*(0.5+({pz}-0.5)*{k:.3f})", cy
+    elif motion == "rl":
+        z, x, y = "1.10", f"(iw-iw/zoom)*(0.5-({pz}-0.5)*{k:.3f})", cy
+    elif motion == "in_corner":                                  # hineinzoomen und leicht zu einer Ecke wandern
+        z = f"1+{za:.4f}*{pz}"
+        x, y = f"(iw-iw/zoom)*(0.5+{dx * 0.5}*{pz})", f"(ih-ih/zoom)*(0.5+{dy * 0.5}*{pz})"
+    else:                                                        # herauszoomen, von einer Ecke zur Mitte
+        z = f"{1 + za:.4f}-{za:.4f}*{pz}"
+        x, y = f"(iw-iw/zoom)*(0.5+{dx * 0.5}*(1-{pz}))", f"(ih-ih/zoom)*(0.5+{dy * 0.5}*(1-{pz}))"
+    if padded:
+        pre = f"scale={fw * 2}:{fh * 2}"
+    else:
+        pre = f"scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,crop={W * 2}:{H * 2}"
+    kb = (f"setpts=PTS-STARTPTS,fps={FPS},{pre},"
+          f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={fw}x{fh}:fps={FPS}")
+    if padded:
+        kb += f",pad={W}:{H}:(ow-iw)/2:(oh-ih)/2"
+    return kb + ",setsar=1"
 
 
 _DUR_CACHE: dict = {}
@@ -2030,6 +2094,10 @@ def execute_plan(
         if status_cb:
             status_cb(tr("Rendere Segmente…"))
         phase("clips")
+        photo_no = {}                      # laufende Nummer je Foto -> Bewegung aus KB_MOTIONS
+        for i, sl in enumerate(plan["slots"]):
+            if sl["kind"] == "photo":
+                photo_no[i] = len(photo_no)
         for i, sl in enumerate(plan["slots"]):
             start_t = intro_len if (i == 0 and intro_len > 0) else sl["start"]
             end_t = sl["start"] + sl["dur"]
@@ -2066,11 +2134,11 @@ def execute_plan(
                 tile += 1
                 step_done()
                 continue
-            out_seg = seg_dir / f"c_{_seg_key(sl['kind'], _file_sig(src), round(sl['offset'], 3), frames, res)}.mp4"
+            out_seg = seg_dir / f"c_{_seg_key(sl['kind'] + (f"kb4m{photo_no.get(i, 0)}" if sl['kind'] == 'photo' else ''), _file_sig(src), round(sl['offset'], 3), frames, res)}.mp4"
             if not out_seg.exists():
                 tmp = _tmp_for(out_seg)
                 if sl["kind"] == "photo":
-                    render_clip_segment("photo", src, tmp, seg_len, vf, frames=frames)
+                    render_clip_segment("photo", src, tmp, seg_len, vf, frames=frames, motion_idx=photo_no.get(i, 0))
                 else:
                     render_clip_segment("video", prep(src), tmp, seg_len, vf, frames=frames, start=sl["offset"])
                 _safe_replace(tmp, out_seg)
@@ -3995,7 +4063,7 @@ def build_step2(parent):
     src_card(1, "video", tr("Eigene Videos"), tr("Clips aus einem beliebigen Ordner auf deinem Computer"), "src_videos",
              [(tr("Ordner wählen"), lambda: choose_media_folder("video"), False, "src_folder"),
               (tr("Dateien wählen"), lambda: choose_media_files("video"), False, "src_files")])
-    src_card(2, "photo", tr("Eigene Fotos"), tr("Fotos als stehende Bilder zwischen den Clips"), "src_photos",
+    src_card(2, "photo", tr("Eigene Fotos"), tr("Fotos mit sanfter Bewegung zwischen den Clips"), "src_photos",
              [(tr("Ordner wählen"), lambda: choose_media_folder("photo"), False, "src_folder"),
               (tr("Dateien wählen"), lambda: choose_media_files("photo"), False, "src_files")])
 
@@ -8820,6 +8888,15 @@ for _L, _a in (("de", "\n\nÜber ⚙ → Kurzanleitung aufgerufen, heißt der Kn
         HELP_TOPICS[_L]["start_welcome"] = (_t, _b + _a)
 
 
+# Fotos mit Ken-Burns-Bewegung
+for _L, _a in (("de", "\n\nFotos stehen nicht still: Jedes Foto bewegt sich sanft – langsam hinein- oder herauszoomen oder leicht seitlich schwenken (Ken-Burns-Effekt). Die Bewegungen wechseln sich ab, zwei gleiche kommen nie direkt hintereinander. Zwischendurch bleibt ein Foto fast ruhig stehen, das bringt etwas Ruhe hinein. Die Bewegung ist bewusst langsam und ruhig, damit sie zu jeder Musik passt. Das passiert automatisch, es gibt dafür keine Einstellung."),
+               ("en", "\n\nPhotos do not stand still: each photo moves gently – a slow zoom in or out or a slight pan (Ken Burns effect). The movements take turns; the same one never comes twice in a row. Now and then a photo stays almost still, which adds a moment of calm. The motion is deliberately slow and calm so that it suits any kind of music. This happens automatically; there is no setting for it."),
+               ("es", "\n\nLas fotos no se quedan quietas: cada foto se mueve suavemente, con un zoom lento hacia dentro o fuera o un ligero desplazamiento lateral (efecto Ken Burns). Los movimientos se alternan; el mismo nunca se repite dos veces seguidas. De vez en cuando una foto se queda casi quieta, lo que aporta un momento de calma. El movimiento es deliberadamente lento y tranquilo para que encaje con cualquier música. Ocurre automáticamente; no hay ningún ajuste para ello.")):
+    if "src_photos" in HELP_TOPICS[_L]:
+        _t, _b = HELP_TOPICS[_L]["src_photos"]
+        HELP_TOPICS[_L]["src_photos"] = (_t, _b + _a)
+
+
 # ── Übersetzungen der v4.0-Oberfläche: deutscher Text -> (English, Español)
 _TR_V4 = {
  "Start": ("Start", "Inicio"),
@@ -8891,7 +8968,7 @@ _TR_V4 = {
  "Ordner wählen": ("Choose folder", "Elegir carpeta"),
  "Dateien wählen": ("Choose files", "Elegir archivos"),
  "Eigene Fotos": ("Your photos", "Tus fotos"),
- "Fotos als stehende Bilder zwischen den Clips": ("Photos as still images between the clips", "Fotos como imágenes fijas entre los clips"),
+ "Fotos mit sanfter Bewegung zwischen den Clips": ("Photos with gentle motion between the clips", "Fotos con movimiento suave entre los clips"),
  "Deine Auswahl": ("Your selection", "Tu selección"),
  "Alle entfernen": ("Remove all", "Quitar todo"),
  "Auswahl leeren": ("Clear selection", "Vaciar selección"),

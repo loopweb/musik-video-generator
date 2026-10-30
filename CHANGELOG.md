@@ -4,6 +4,7 @@
 
 **Neu**
 
+- **Fotos bewegen sich (Ken-Burns-Effekt):** Jedes Foto zoomt langsam hinein oder heraus, schwenkt leicht zur Seite oder wandert beim Zoomen zu einer Ecke. Dazu kommt eine Ruhepause, in der ein Foto fast still steht (1 % Zoom). Die sieben Varianten wechseln sich ab, zwei gleiche folgen nie aufeinander. Die Bewegung ist bewusst langsam und ruhig, damit sie zu jeder Musik passt. Automatisch, ohne neue Einstellung; funktioniert in 16:9, 9:16 und im Short.
 - **Vollautomatik wählt passende Clips:** Statt wahllos aus dem ganzen Pool zu mischen, schätzt das Programm die Stimmung des Songs ein (Tempo, Energie, Dur/Moll) und jeden Clip nach Bild (Helligkeit, Farbe, Bewegung) und Ordnername („traurig“, „glücklich“, „Strand“ …). Genommen werden vor allem neutrale Szenen, dazu Clips passend zur Stimmung – traurige und fröhliche Clips werden nicht gemischt. Die Statuszeile zeigt, wie der Song eingeschätzt wurde. Die Clip-Einschätzung wird gespeichert, beim nächsten Mal geht es sofort.
 - **Vollautomatik sichtbar:** Nach dem Klick springt das Programm sofort zu Schritt 4 („Vollautomatik läuft …“) und zeigt die Arbeitsschritte mit Fortschritt – Song anhören, Clips aussuchen, planen, rendern – bis zur Fertig-Seite.
 

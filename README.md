@@ -32,7 +32,7 @@ Fertige Windows-EXE (portable, kein Python nötig):
 - **Mehrere Formate in einem Durchgang** – 16:9, 9:16 und 58-Sekunden-Short (der Short nimmt automatisch den stärksten Songabschnitt, ohne Intro/Outro)
 - **Fünf Schnittgeschwindigkeiten** – von sanft bis schnell, oder zufällig gemischt
 - **Clip-Pool mit optionalen Kategorien** – ein Ordner `clips/` für immer wieder genutztes Material; Unterordner erscheinen im Auswahlfenster als Reiter
-- **Clips und Fotos aus jeder Quelle** – Pool, Ordner, einzelne Dateien oder Drag & Drop
+- **Clips und Fotos aus jeder Quelle** – Pool, Ordner, einzelne Dateien oder Drag & Drop; Fotos bewegen sich sanft (Ken-Burns-Effekt)
 - **Clipfolge vor dem Rendern** – verschieben per Ziehen, „Clip tauschen“ setzt einen anderen Clip gleicher Länge ein
 - **Nachträglich ändern** – nach dem Rendern Clips ändern; „Änderungen übernehmen“ rendert nur, was sich geändert hat
 - **Live-Ansicht beim Rendern** – Laufband mit den Abschnitten, Übersichtsstreifen und Schritt-Liste mit Fortschrittsbalken
