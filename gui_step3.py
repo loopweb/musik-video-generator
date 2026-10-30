@@ -3647,6 +3647,9 @@ def rebuild_ui():
 
 
 # ===================== Willkommen (einmalig) =====================
+_welcome_return: list = [None]
+
+
 def build_welcome(parent):
     heading(parent, tr("Willkommen beim Musik Video Generator {v}").format(v=APP_VERSION),
             tr("Aus deiner Musik und deinen Clips entsteht in fünf Schritten ein Video – die Schnitte liegen automatisch auf dem Beat."))
@@ -3684,13 +3687,36 @@ def build_welcome(parent):
                  text_color=ACCENT if n_pool else C_WARN_TX, anchor="w").pack(fill="x", padx=24, pady=(14, 6))
     ctk.CTkLabel(c2, text=str(POOL_DIR), font=F(11), text_color=C_MUTED, anchor="w", justify="left",
                  wraplength=420).pack(fill="x", padx=24)
-    btn_secondary(c2, tr("Pool-Ordner öffnen"), lambda: open_path_portable(POOL_DIR), width=190).pack(anchor="w", padx=24, pady=(14, 20))
+    btn_secondary(c2, tr("Pool-Ordner öffnen"), lambda: open_path_portable(POOL_DIR), width=190).pack(anchor="w", padx=24, pady=(14, 0))
+    hp = ctk.CTkFrame(c2, fg_color="transparent")
+    hp.pack(fill="x", padx=24, pady=(18, 20))
+    H(hp, "welcome_help")
+    ctk.CTkFrame(hp, fg_color=C_BORDER, height=1, corner_radius=0).pack(fill="x", pady=(0, 12))
+    ctk.CTkLabel(hp, text=tr("Hilfe"), font=F(14, True), text_color=C_TEXT, anchor="w").pack(fill="x")
+    ctk.CTkLabel(hp, text=tr("„?“ oben rechts: Bereich anklicken und die Erklärung lesen. Im ⚙-Menü: PDF-Anleitung, Short per URL, Vollautomatik, Sprache, Darstellung und Updates."),
+                 font=F(12), text_color=C_MUTED, anchor="w", justify="left", wraplength=420).pack(fill="x", pady=(2, 0))
 
-    def start():
-        save_settings({"welcome_v4": True})
-        go(1)
+    back = _welcome_return[0]
+    if back:                                       # über ⚙ → Kurzanleitung geöffnet: zurück, wo man war
+        def ret():
+            _welcome_return[0] = None
+            go(back)
+        set_footer(right=[(tr("Zurück zu Schritt {n}").format(n=back) + "  →", ret, "primary", True, "start_welcome")])
+    else:
+        def start():
+            save_settings({"welcome_v4": True})
+            go(1)
+        set_footer(right=[(tr("Los geht's") + "  →", start, "primary", True, "start_welcome")])
 
-    set_footer(right=[(tr("Los geht's") + "  →", start, "primary", True, "start_welcome")])
+
+def open_welcome():
+    """⚙ → Kurzanleitung: die Willkommensseite, danach zurück zum vorigen Schritt."""
+    if render_busy or plan_busy:
+        ui_status(tr("Während des Renderns nicht möglich"))
+        return
+    if current_step != 0:
+        _welcome_return[0] = current_step
+    go(0)
 
 
 # ===================== Schritt 1: Start =====================
@@ -6842,8 +6868,7 @@ def open_youtube_upload(explicit_path: Optional[Path] = None):
 def show_settings_menu(widget=None):
     menu = tk.Menu(app, tearoff=0)
     busy_state = "disabled" if render_busy else "normal"
-    menu.add_command(label=tr("Klick-Hilfe"), command=lambda: start_click_help())
-    menu.add_command(label=tr("Kurzanleitung"), command=open_help)
+    menu.add_command(label=tr("Kurzanleitung"), command=open_welcome, state=busy_state)
     menu.add_command(label=tr("PDF-Anleitung"), command=open_pdf_manual)
     menu.add_separator()
     menu.add_command(label=tr("Short per URL (Zwischenablage)") + ("  …" if _url_short_busy else ""),
@@ -8763,6 +8788,38 @@ for _L, (_after, _txt) in {
     HELP_TOPICS[_L]["help"] = (_t, _b)
 
 
+# ⚙-Menü ohne „Klick-Hilfe“ (gibt es über „?“); „Kurzanleitung“ öffnet die Willkommensseite
+import re as _re
+for _L, (_kh, _ku, _new_ku, _qold, _qnew) in {
+    "de": ("• Klick-Hilfe:", "• Kurzanleitung:", "• Kurzanleitung: öffnet die Willkommensseite mit den fünf Schritten, dem Clip-Pool und dem Hilfe-Hinweis. „Zurück zu Schritt …“ bringt dich wieder dorthin, wo du warst – deine Auswahl bleibt erhalten.",
+           "Startet die Klick-Hilfe direkt, ohne Umweg über das Zahnrad.", "Startet die Klick-Hilfe."),
+    "en": ("• Click help:", "• Quick guide:", "• Quick guide: opens the welcome page with the five steps, the clip pool and the help note. “Back to step …” takes you back to where you were – your selection is kept.",
+           "Starts click help directly, without going through the gear.", "Starts click help."),
+    "es": ("• Ayuda con clic:", "• Guía rápida:", "• Guía rápida: abre la página de bienvenida con los cinco pasos, el grupo de clips y la nota de ayuda. «Volver al paso …» te lleva de nuevo adonde estabas; tu selección se conserva.",
+           "Inicia la ayuda con clic directamente, sin pasar por el engranaje.", "Inicia la ayuda con clic."),
+}.items():
+    _t, _b = HELP_TOPICS[_L]["help"]
+    _b = _re.sub(_re.escape(_kh) + r"[^\n]*\n", "", _b, count=1)
+    _b = _re.sub(_re.escape(_ku) + r"[^\n]*", _new_ku.replace("\\", "\\\\"), _b, count=1)
+    HELP_TOPICS[_L]["help"] = (_t, _b)
+    if "qhelp" in HELP_TOPICS[_L]:
+        _t, _b = HELP_TOPICS[_L]["qhelp"]
+        HELP_TOPICS[_L]["qhelp"] = (_t, _b.replace(_qold, _qnew))
+_HELP_V55 = {
+ "de": {"welcome_help": ("Hilfe", "Zu jedem Bereich des Programms gibt es eine ausführliche Erklärung: „?“ oben rechts drücken und auf den Bereich klicken. Im ⚙-Menü findest du außerdem die PDF-Anleitung in deiner Sprache, Short per URL, die Vollautomatik, Sprache, Darstellung und den Hinweis auf neue Versionen.\n\nDiese Seite erreichst du jederzeit wieder über ⚙ → Kurzanleitung.")},
+ "en": {"welcome_help": ("Help", "There is a detailed explanation for every area of the program: press “?” at the top right and click the area. In the ⚙ menu you will also find the PDF manual in your language, Short from URL, Full auto, language, appearance and the notice about new versions.\n\nYou can reach this page again at any time via ⚙ → Quick guide.")},
+ "es": {"welcome_help": ("Ayuda", "Cada zona del programa tiene una explicación detallada: pulsa «?» arriba a la derecha y haz clic en la zona. En el menú ⚙ encontrarás además el manual PDF en tu idioma, Short desde URL, Automático total, idioma, apariencia y el aviso de nuevas versiones.\n\nPuedes volver a esta página en cualquier momento con ⚙ → Guía rápida.")},
+}
+for _L, _topics in _HELP_V55.items():
+    HELP_TOPICS[_L].update(_topics)
+for _L, _a in (("de", "\n\nÜber ⚙ → Kurzanleitung aufgerufen, heißt der Knopf „Zurück zu Schritt …“ und bringt dich dorthin zurück, wo du warst."),
+               ("en", "\n\nWhen opened via ⚙ → Quick guide, the button is called “Back to step …” and takes you back to where you were."),
+               ("es", "\n\nSi se abre con ⚙ → Guía rápida, el botón se llama «Volver al paso …» y te lleva de nuevo adonde estabas.")):
+    if "start_welcome" in HELP_TOPICS[_L]:
+        _t, _b = HELP_TOPICS[_L]["start_welcome"]
+        HELP_TOPICS[_L]["start_welcome"] = (_t, _b + _a)
+
+
 # ── Übersetzungen der v4.0-Oberfläche: deutscher Text -> (English, Español)
 _TR_V4 = {
  "Start": ("Start", "Inicio"),
@@ -9196,6 +9253,11 @@ _TR_V51 = {
     "ffmpeg no responde desde hace {n} minutos y se ha detenido. Crea un informe de error en ⚙ → Informar de un problema."),
  "vorbereiten": ("preparing", "preparando"),
  "Zufällig": ("Random", "Aleatorio"),
+ "Hilfe": ("Help", "Ayuda"),
+ "„?“ oben rechts: Bereich anklicken und die Erklärung lesen. Im ⚙-Menü: PDF-Anleitung, Short per URL, Vollautomatik, Sprache, Darstellung und Updates.": (
+    "“?” at the top right: click an area and read the explanation. In the ⚙ menu: PDF manual, Short from URL, Full auto, language, appearance and updates.",
+    "«?» arriba a la derecha: haz clic en una zona y lee la explicación. En el menú ⚙: manual PDF, Short desde URL, Automático total, idioma, apariencia y actualizaciones."),
+ "Zurück zu Schritt {n}": ("Back to step {n}", "Volver al paso {n}"),
  "Vollautomatik": ("Full auto", "Automático total"),
  "Pool-Clips": ("pool clips", "clips del grupo"),
  "Um diese Funktion zu nutzen, wähle in Schritt 1 ein Musikstück und lege ein paar Clips in den Clip-Pool-Ordner.": (
