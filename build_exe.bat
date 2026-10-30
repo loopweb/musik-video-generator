@@ -1,7 +1,7 @@
 @echo off
 echo.
 echo  ============================================
-echo   Musik Video Generator v4.2 - EXE Build
+echo   Musik Video Generator v4.3 - EXE Build
 echo  ============================================
 echo.
 

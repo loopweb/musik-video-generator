@@ -1,8 +1,8 @@
-# Musik Video Generator v4.2
+# Musik Video Generator v4.3
 
 from __future__ import annotations
 
-APP_VERSION = "4.2"
+APP_VERSION = "4.3"
 
 import os
 import sys
@@ -5925,7 +5925,9 @@ def _render_done(outputs, failed, version, rendered_plan, first, has_main=True):
         thumb_state.update({"cands": [], "idx": 0, "saved": None, "busy": False, "style": None, "base": None, "final": None})
     go(5)
     names = " + ".join(p.name for _f, p in outputs)
-    ui_status(tr("Fertig: ") + names + ((tr("  —  Fehler bei ") + "; ".join(failed)) if failed else ""))
+    ui_status(tr("Fertig: ") + names + ((tr("  —  Fehler bei ") + "; ".join(failed)) if failed else "")
+              + (("  ·  " + _auto_msg[0]) if _auto_msg[0] else ""))
+    _auto_msg[0] = ""
     if has_main:
         start_thumb_candidates(rendered_plan)
 
@@ -6839,7 +6841,7 @@ def show_settings_menu(widget=None):
     menu.add_separator()
     menu.add_command(label=tr("Short per URL (Zwischenablage)") + ("  …" if _url_short_busy else ""),
                      command=on_short_url_click)
-    menu.add_command(label="⚡ " + tr("Vollautomatik") + f"  ({AUTO_CLIPS} " + tr("Pool-Clips") + ")",
+    menu.add_command(label=tr("Vollautomatik") + f"  ({AUTO_CLIPS} " + tr("Pool-Clips") + ")",
                      command=full_auto_clicked, state=busy_state)
     menu.add_command(label=tr("Pool-Ordner öffnen"), command=lambda: open_path_portable(POOL_DIR))
     menu.add_command(label=tr("Output-Ordner"), command=open_output_folder)
@@ -7345,7 +7347,165 @@ def clear_cache_clicked():
 
 
 # ===================== Vollautomatik =====================
+# ── Vollautomatik: Clips passend zur Stimmung des Songs
+#    Skala -1 (ruhig/traurig) … 0 (neutral) … +1 (lebhaft/fröhlich). Neutrale Szenen (Strand, Natur) passen immer.
+MOOD_WORDS = {
+    -1: ("traurig", "sad", "ruhig", "calm", "melanch", "nacht", "night", "dark", "dunkel", "triste", "regen", "rain"),
+    +1: ("glücklich", "gluecklich", "happy", "party", "fröhlich", "froehlich", "fun", "tanz", "dance", "feliz", "alegre",
+         "fiesta", "club", "action"),
+    0: ("neutral", "strand", "beach", "playa", "natur", "nature", "meer", "sea", "ocean", "landschaft", "landscape",
+        "himmel", "sky", "palm"),
+}
+MOOD_NEUTRAL = 0.3              # |Wert| bis hierhin gilt als neutral
+
+
+def _word_mood(name: str) -> Optional[int]:
+    n = name.lower()
+    for k in (-1, +1, 0):
+        if any(w in n for w in MOOD_WORDS[k]):
+            return k
+    return None
+
+
+def song_mood(path: str) -> float:
+    """Grobe Stimmung des Songs aus Tempo, Energie und Dur/Moll (−1 ruhig/traurig … +1 lebhaft)."""
+    y, sr = librosa.load(path, sr=22050, mono=True, duration=90)
+    tempo = float(np.atleast_1d(librosa.beat.beat_track(y=y, sr=sr)[0])[0])
+    t = float(np.clip((tempo - 85) / 50, -1, 1))                       # 60 → −0,5 · 135 → +1
+    rms = float(np.mean(librosa.feature.rms(y=y)))
+    e = float(np.clip((rms - 0.08) / 0.08, -1, 1))
+    chroma = np.mean(librosa.feature.chroma_cqt(y=y, sr=sr), axis=1)
+    major = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+    minor = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+    cmaj = max(np.corrcoef(chroma, np.roll(major, i))[0, 1] for i in range(12))
+    cmin = max(np.corrcoef(chroma, np.roll(minor, i))[0, 1] for i in range(12))
+    m = float(np.clip((cmaj - cmin) * 4, -1, 1))
+    return float(np.clip(0.45 * t + 0.35 * e + 0.20 * m, -1, 1))
+
+
+def _clip_look(p: Path) -> Optional[dict]:
+    """Helligkeit, Farbigkeit, Bewegung eines Clips/Fotos (einmal berechnet, dann aus dem Cache)."""
+    try:
+        st = p.stat()
+        key = hashlib.md5(f"{p.resolve()}|{st.st_size}|{int(st.st_mtime)}|mood1".encode("utf-8", "ignore")).hexdigest()
+    except Exception:
+        return None
+    fp = THUMB_DIR / f"m_{key}.json"
+    try:
+        return _json.loads(fp.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    from PIL import ImageStat
+    frames = []
+    if p.suffix.lower() in IMAGE_EXTS:
+        try:
+            frames = [Image.open(p).convert("RGB").resize((64, 36))]
+        except Exception:
+            return None
+    else:
+        dur = media_duration(p) or 0.0
+        W, H = 64, 36
+        for f in (0.15, 0.35, 0.55, 0.75):
+            for dt in (0.0, 0.25):                 # Paare 0,25 s auseinander -> Bewegung
+                at = max(0.0, dur * f + dt)
+                try:
+                    raw = check_output_hidden([ffmpeg_cmd(), "-v", "error", "-ss", f"{at:.2f}", "-i", str(p), "-frames:v", "1",
+                                               "-vf", f"scale={W}:{H}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], timeout=30)
+                    if len(raw) >= W * H * 3:
+                        frames.append(Image.frombytes("RGB", (W, H), raw[:W * H * 3]))
+                except Exception:
+                    pass
+    if not frames:
+        return None
+    hsv = [ImageStat.Stat(f_.convert("HSV")).mean for f_ in frames]
+    bright = sum(h[2] for h in hsv) / len(hsv) / 255
+    sat = sum(h[1] for h in hsv) / len(hsv) / 255
+    motion = 0.0
+    if len(frames) >= 2:
+        diffs = []
+        for a, b in zip(frames[0::2], frames[1::2]):
+            da = np.asarray(a.convert("L"), dtype=np.float32)
+            db = np.asarray(b.convert("L"), dtype=np.float32)
+            diffs.append(float(np.mean(np.abs(da - db))) / 255)
+        motion = sum(diffs) / len(diffs) if diffs else 0.0
+    look = {"bright": bright, "sat": sat, "motion": motion}
+    try:
+        fp.write_text(_json.dumps(look), encoding="utf-8")
+    except Exception:
+        pass
+    return look
+
+
+def clip_mood(p: Path) -> float:
+    """Stimmung eines Clips: aus dem Bild (hell/bunt/bewegt = lebhaft) und dem Ordnernamen."""
+    look = _clip_look(p) or {"bright": 0.5, "sat": 0.4, "motion": 0.05}
+    v = (0.45 * (look["bright"] - 0.45) / 0.22 + 0.35 * (look["sat"] - 0.38) / 0.22
+         + 0.20 * (min(look["motion"], 0.12) - 0.04) / 0.05)
+    v = float(np.clip(v, -1, 1)) * 0.6               # Bild allein ist nur ein Hinweis
+    w = None
+    try:
+        rel = p.resolve().relative_to(POOL_DIR.resolve())
+        w = _word_mood(rel.parts[0]) if len(rel.parts) > 1 else None
+    except Exception:
+        pass
+    if w is None:
+        w = _word_mood(p.stem)
+    if w == 0:
+        v *= 0.3                                     # „Strand“, „neutral“ … -> Mitte
+    elif w is not None:
+        v = float(np.clip(0.5 * w + 0.5 * v, -1, 1))
+    return v
+
+
+def pick_auto_clips(files: list, song_m: float, n: int) -> tuple[list, str]:
+    """Bevorzugt neutrale Szenen (ca. 60 %), dazu Clips der passenden Seite; nie die Gegenseite (wenn vermeidbar)."""
+    scored = [(f_, clip_mood(f_)) for f_ in files]
+    side = -1 if song_m < -0.2 else (1 if song_m > 0.2 else 0)
+    neutral = [x for x in scored if abs(x[1]) <= MOOD_NEUTRAL]
+    match = [x for x in scored if (side and x[1] * side > MOOD_NEUTRAL)]
+    other = [x for x in scored if x not in neutral and x not in match]
+    random.shuffle(neutral)
+    random.shuffle(match)
+    if side == 0:
+        want_n, want_m = n, 0
+    else:
+        want_n = round(n * 0.6)
+        want_m = n - want_n
+    pick = neutral[:want_n] + match[:want_m]
+    rest = neutral[want_n:] + match[want_m:]
+    if len(pick) < n:                                # auffüllen: zuerst Rest der erlaubten …
+        pick += rest[:n - len(pick)]
+    if len(pick) < n:                                # … dann nur von EINER Seite (der, zu der der Song neigt) – nie gemischt
+        lean = side or (-1 if song_m < 0 else 1)
+        same = [x for x in other if x[1] * lean > 0]
+        same.sort(key=lambda x: abs(x[1] - song_m))
+        pick += same[:n - len(pick)]
+    if len(pick) < n:                                # Pool hat nichts anderes: dann eben die Gegenseite
+        opp = [x for x in other if x not in pick]
+        opp.sort(key=lambda x: abs(x[1] - song_m))
+        pick += opp[:n - len(pick)]
+    random.shuffle(pick)
+    files_ = [f_ for f_, _v in pick]
+    folders = []
+    for f_ in files_:
+        try:
+            rel = f_.resolve().relative_to(POOL_DIR.resolve())
+            name = rel.parts[0] if len(rel.parts) > 1 else ""
+        except Exception:
+            name = ""
+        if name and name not in folders:
+            folders.append(name)
+    mood_txt = tr("ruhig") if side < 0 else (tr("lebhaft") if side > 0 else tr("ausgeglichen"))
+    msg = tr("Song klingt {mood} – vor allem neutrale Szenen").format(mood=mood_txt)
+    if side:
+        msg += tr(", dazu passende Clips")
+    if folders:
+        msg += "  (" + ", ".join(folders[:3]) + ")"
+    return files_, msg
+
+
 _auto_run = [False]
+_auto_msg = [""]
 AUTO_CLIPS = 10
 
 
@@ -7357,7 +7517,7 @@ def _auto_hint(pool_empty: bool):
     w.configure(fg_color=C_BG)
     c = card(w)
     c.pack(fill="both", expand=True, padx=14, pady=14)
-    ctk.CTkLabel(c, text="⚡  " + tr("Vollautomatik"), font=F(16, True), text_color=C_TEXT, anchor="w").pack(fill="x", padx=22, pady=(18, 4))
+    ctk.CTkLabel(c, text=tr("Vollautomatik"), font=F(16, True), text_color=C_TEXT, anchor="w").pack(fill="x", padx=22, pady=(18, 4))
     ctk.CTkLabel(c, text=tr("Um diese Funktion zu nutzen, wähle in Schritt 1 ein Musikstück und lege ein paar Clips in den Clip-Pool-Ordner."),
                  font=F(12), text_color=C_TEXT, anchor="w", justify="left", wraplength=380).pack(fill="x", padx=22)
     bt = ctk.CTkFrame(c, fg_color="transparent")
@@ -7386,15 +7546,38 @@ def full_auto_clicked():
         _auto_hint(pool_empty=not files)
         return
     if selection and not messagebox.askyesno(tr("Vollautomatik"),
-                                             tr("Deine bisherige Auswahl an Clips und Fotos wird durch zufällige Clips aus dem Pool ersetzt. Weiter?")):
+                                             tr("Deine bisherige Auswahl an Clips und Fotos wird durch passende Clips aus dem Pool ersetzt. Weiter?")):
         return
-    pick = random.sample(files, min(AUTO_CLIPS, len(files)))
+    _auto_run[0] = True
+    ui_status(tr("Vollautomatik: passende Clips werden ausgesucht …"))
+    mf = music_file
+
+    def worker():
+        try:
+            sm = song_mood(mf)
+        except Exception:
+            sm = 0.0
+        try:
+            pick, msg = pick_auto_clips(files, sm, min(AUTO_CLIPS, len(files)))
+        except Exception:
+            pick, msg = random.sample(files, min(AUTO_CLIPS, len(files))), ""
+        _trace(f"Vollautomatik: Song-Stimmung {sm:+.2f} · " + ", ".join(p_.name for p_ in pick))
+        app.after(0, _auto_start, pick, msg)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _auto_start(pick, msg):
+    if render_busy or plan_busy:
+        _auto_run[0] = False
+        return
     selection[:] = [{"kind": "photo" if p_.suffix.lower() in IMAGE_EXTS else "video", "path": p_} for p_ in pick]
     queue_sel_thumbs()
     _forget_plan()
-    _auto_run[0] = True
-    ui_status(tr("Vollautomatik: {n} zufällige Clips aus dem Pool").format(n=len(pick)))
+    _auto_msg[0] = msg
     enter_step4()
+    if msg:
+        ui_status(msg)
 
 
 def on_reset_clicked():
@@ -8524,9 +8707,9 @@ for _L, _a in (("de", "\n\nAuswahl: Liegen mehrere Videos im Ordner, erscheint d
 
 # Vollautomatik im ⚙-Menü
 for _L, (_after, _txt) in {
-    "de": ("• Pool-Ordner öffnen", "• Vollautomatik: Abkürzung für Eilige. Ist ein Musikstück gewählt, nimmt das Programm 10 zufällige Clips aus dem Pool, plant die Clipfolge, rendert sofort und zeigt am Ende die Fertig-Seite. Formate, Extras und Schnitt kommen aus den aktuellen Einstellungen; leere Intro-/Outro-Ordner werden übersprungen. Eine vorhandene Auswahl wird nach Rückfrage ersetzt. Danach kannst du wie gewohnt einzelne Clips ändern.\n"),
-    "en": ("• Open pool folder", "• Full auto: a shortcut for when you are in a hurry. If a piece of music is chosen, the program takes 10 random clips from the pool, plans the clip order, renders straight away and shows the Done page at the end. Formats, extras and cutting come from the current settings; empty intro/outro folders are skipped. An existing selection is replaced after asking. Afterwards you can change single clips as usual.\n"),
-    "es": ("• Abrir carpeta del grupo", "• Automático total: un atajo para cuando hay prisa. Si hay una canción elegida, el programa toma 10 clips aleatorios del grupo, planifica el orden, renderiza al momento y al final muestra la página Listo. Formatos, extras y corte se toman de los ajustes actuales; las carpetas de intro/outro vacías se omiten. Una selección existente se sustituye tras preguntar. Después puedes cambiar clips sueltos como siempre.\n"),
+    "de": ("• Pool-Ordner öffnen", "• Vollautomatik: Abkürzung für Eilige. Ist ein Musikstück gewählt, hört sich das Programm den Song an (ruhig oder lebhaft) und sucht 10 passende Clips aus dem Pool aus: vor allem neutrale Szenen wie Strand oder Natur, dazu Clips, die zur Stimmung passen – traurige und fröhliche Clips werden nicht gemischt. Dabei helfen das Bild (Helligkeit, Farbe, Bewegung) und Ordnernamen wie „traurig“, „glücklich“ oder „Strand“. Dann plant es die Clipfolge, rendert sofort und zeigt am Ende die Fertig-Seite; in der Statuszeile steht, wie es den Song eingeschätzt hat. Formate, Extras und Schnitt kommen aus den aktuellen Einstellungen; leere Intro-/Outro-Ordner werden übersprungen. Eine vorhandene Auswahl wird nach Rückfrage ersetzt. Danach kannst du wie gewohnt einzelne Clips ändern.\n"),
+    "en": ("• Open pool folder", "• Full auto: a shortcut for when you are in a hurry. If a piece of music is chosen, the program listens to the song (calm or lively) and picks 10 matching clips from the pool: mainly neutral scenes such as beach or nature, plus clips that suit the mood – sad and happy clips are not mixed. The picture (brightness, colour, motion) and folder names such as “sad”, “happy” or “beach” help with this. Then it plans the clip order, renders straight away and shows the Done page at the end; the status line shows how it judged the song. Formats, extras and cutting come from the current settings; empty intro/outro folders are skipped. An existing selection is replaced after asking. Afterwards you can change single clips as usual.\n"),
+    "es": ("• Abrir carpeta del grupo", "• Automático total: un atajo para cuando hay prisa. Si hay una canción elegida, el programa escucha la canción (tranquila o animada) y elige 10 clips adecuados del grupo: sobre todo escenas neutras como playa o naturaleza, más clips que encajan con el ánimo; los clips tristes y alegres no se mezclan. Ayudan la imagen (brillo, color, movimiento) y nombres de carpeta como «triste», «feliz» o «playa». Después planifica el orden, renderiza al momento y al final muestra la página Listo; la línea de estado indica cómo ha valorado la canción. Formatos, extras y corte se toman de los ajustes actuales; las carpetas de intro/outro vacías se omiten. Una selección existente se sustituye tras preguntar. Después puedes cambiar clips sueltos como siempre.\n"),
 }.items():
     _t, _b = HELP_TOPICS[_L]["help"]
     if _after in _b and "Vollautomatik" not in _b and "Full auto" not in _b and "Automático total" not in _b:
@@ -8972,9 +9155,15 @@ _TR_V51 = {
  "Um diese Funktion zu nutzen, wähle in Schritt 1 ein Musikstück und lege ein paar Clips in den Clip-Pool-Ordner.": (
     "To use this function, choose a piece of music in step 1 and put a few clips into the clip pool folder.",
     "Para usar esta función, elige una canción en el paso 1 y pon algunos clips en la carpeta del grupo de clips."),
- "Deine bisherige Auswahl an Clips und Fotos wird durch zufällige Clips aus dem Pool ersetzt. Weiter?": (
-    "Your current selection of clips and photos will be replaced by random clips from the pool. Continue?",
-    "Tu selección actual de clips y fotos se sustituirá por clips aleatorios del grupo. ¿Continuar?"),
+ "Deine bisherige Auswahl an Clips und Fotos wird durch passende Clips aus dem Pool ersetzt. Weiter?": (
+    "Your current selection of clips and photos will be replaced by matching clips from the pool. Continue?",
+    "Tu selección actual de clips y fotos se sustituirá por clips adecuados del grupo. ¿Continuar?"),
+ "Vollautomatik: passende Clips werden ausgesucht …": ("Full auto: choosing matching clips …", "Automático total: eligiendo clips adecuados …"),
+ "Song klingt {mood} – vor allem neutrale Szenen": ("Song sounds {mood} – mainly neutral scenes", "La canción suena {mood}: sobre todo escenas neutras"),
+ ", dazu passende Clips": (", plus matching clips", ", más clips adecuados"),
+ "ruhig": ("calm", "tranquila"),
+ "lebhaft": ("lively", "animada"),
+ "ausgeglichen": ("balanced", "equilibrada"),
  "Vollautomatik: {n} zufällige Clips aus dem Pool": ("Full auto: {n} random clips from the pool", "Automático total: {n} clips aleatorios del grupo"),
  "{n} Dateien": ("{n} files", "{n} archivos"),
  "Fehlerbericht erstellt": ("Error report created", "Informe de error creado"),

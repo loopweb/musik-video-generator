@@ -4,7 +4,7 @@
 
 Ein Windows-Desktop-Tool, das automatisch Musikvideos erstellt: Musik wählen, Clips und Fotos auswählen – das Programm legt die Schnitte per FFmpeg auf den Beat. In fünf Schritten zum fertigen Video, inklusive YouTube-Thumbnail.
 
-![Version](https://img.shields.io/badge/Version-4.2-1f6aa5)
+![Version](https://img.shields.io/badge/Version-4.3-1f6aa5)
 ![Format](https://img.shields.io/badge/Format-16%3A9%20%7C%209%3A16%20%7C%20Shorts-1f6aa5)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0078D6)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -43,7 +43,7 @@ Fertige Windows-EXE (portable, kein Python nötig):
 - **Drei Sprachen** – Deutsch, English, Español; Wechsel jederzeit ohne Neustart
 - **Hell / Dunkel / System** – Darstellung im ⚙-Menü
 - **Klick-Hilfe** – „?“ drücken, auf einen Bereich klicken, ausführliche Erklärung lesen (drei Sprachen)
-- **Vollautomatik** – ⚙ → Vollautomatik: 10 zufällige Pool-Clips zur gewählten Musik, direkt zum fertigen Video
+- **Vollautomatik** – ⚙ → Vollautomatik: 10 zur Stimmung des Songs passende Pool-Clips, direkt zum fertigen Video
 - **Short per URL** – YouTube-Link aus der Zwischenablage → 45-s-Short (9:16) mit stärkstem Abschnitt, Fortschrittsfenster mit allen Schritten
 - **Komfort** – Restzeit beim Rendern, weiches Ende ohne Outro, Dateiauswahl merkt sich die letzten Ordner
 - **Update-Hinweis** – MVG zeigt oben an, wenn auf GitHub eine neue Version bereitsteht

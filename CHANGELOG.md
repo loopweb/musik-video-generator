@@ -1,10 +1,16 @@
 # Changelog — Musik Video Generator
 
+## v4.3
+
+**Neu**
+
+- **Vollautomatik wählt passende Clips:** Statt wahllos aus dem ganzen Pool zu mischen, schätzt das Programm die Stimmung des Songs ein (Tempo, Energie, Dur/Moll) und jeden Clip nach Bild (Helligkeit, Farbe, Bewegung) und Ordnername („traurig“, „glücklich“, „Strand“ …). Genommen werden vor allem neutrale Szenen, dazu Clips passend zur Stimmung – traurige und fröhliche Clips werden nicht gemischt. Die Statuszeile zeigt, wie der Song eingeschätzt wurde. Die Clip-Einschätzung wird gespeichert, beim nächsten Mal geht es sofort.
+
 ## v4.2
 
 **Neu**
 
-- **Vollautomatik:** ⚙ → „⚡ Vollautomatik“ nimmt zur gewählten Musik 10 zufällige Clips aus dem Pool, plant, rendert und zeigt die Fertig-Seite. Ohne Musik oder bei leerem Pool erscheint ein kurzer Hinweis; eine vorhandene Auswahl wird nach Rückfrage ersetzt.
+- **Vollautomatik:** ⚙ → „Vollautomatik“ nimmt zur gewählten Musik 10 zufällige Clips aus dem Pool, plant, rendert und zeigt die Fertig-Seite. Ohne Musik oder bei leerem Pool erscheint ein kurzer Hinweis; eine vorhandene Auswahl wird nach Rückfrage ersetzt.
 - **Pre-Intro, Intro und Outro auswählen:** Liegen mehrere Videos im jeweiligen Ordner, erscheint in Schritt 3 neben dem Schalter ein Auswahlfeld – „Zufällig“ (wie bisher) oder ein bestimmtes Video. Die Wahl wird gemerkt; fehlt das Video später, gilt wieder „Zufällig“. Die Zusammenfassung zeigt das gewählte Video in Klammern.
 
 **Verbessert**
